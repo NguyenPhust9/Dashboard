@@ -5,15 +5,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "accounting:sync": "node scripts/accounting-sync.mjs",
+    "crm:weekly-report:sync": "node scripts/crm-weekly-report-sync.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.119.0",
     "lucide-react": "^0.468.0",
     "next": "^16.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "typescript": "^5.7.0"

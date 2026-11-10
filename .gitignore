@@ -31,3 +31,7 @@ yarn-error.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local AMIS browser session and generated financial report snapshots
+.amis-*-profile/
+data/*.json

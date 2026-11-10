@@ -170,6 +170,7 @@ button {
   background: transparent;
   text-align: left;
   color: #5d6760;
+  text-decoration: none;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }

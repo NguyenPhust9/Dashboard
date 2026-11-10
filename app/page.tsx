@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bike, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, ChevronDown, CircleHelp, Clock3, CreditCard, Download,
@@ -9,15 +11,15 @@ import {
 } from 'lucide-react';
 
 const sections = [
-  { name: 'Tổng quan Giám đốc', icon: LayoutDashboard, short: 'Tổng quan' },
-  { name: 'Doanh số & tăng trưởng', icon: TrendingUp, short: 'Doanh số' },
-  { name: 'Đại lý & khách hàng', icon: Users, short: 'Đại lý' },
-  { name: 'Hiệu suất kinh doanh', icon: Target, short: 'Hiệu suất' },
-  { name: 'Công nợ & dòng tiền', icon: Wallet, short: 'Công nợ' },
-  { name: 'Sản phẩm & tồn kho', icon: Boxes, short: 'Sản phẩm' },
-  { name: 'Đơn hàng & vận hành', icon: ShoppingCart, short: 'Đơn hàng' },
-  { name: 'Marketing & nguồn khách', icon: Activity, short: 'Marketing' },
-  { name: 'Dự báo & cảnh báo', icon: Bell, short: 'Cảnh báo' },
+  { name: 'Tổng quan Giám đốc', icon: LayoutDashboard, short: 'Tổng quan', href: '/' },
+  { name: 'Doanh số & tăng trưởng', icon: TrendingUp, short: 'Doanh số', href: '/doanh-so-tang-truong' },
+  { name: 'Đại lý & khách hàng', icon: Users, short: 'Đại lý', href: '/dai-ly-khach-hang' },
+  { name: 'Hiệu suất kinh doanh', icon: Target, short: 'Hiệu suất', href: '/hieu-suat-kinh-doanh' },
+  { name: 'Công nợ & dòng tiền', icon: Wallet, short: 'Công nợ', href: '/cong-no-dong-tien' },
+  { name: 'Sản phẩm & tồn kho', icon: Boxes, short: 'Sản phẩm', href: '/san-pham-ton-kho' },
+  { name: 'Đơn hàng & vận hành', icon: ShoppingCart, short: 'Đơn hàng', href: '/don-hang-van-hanh' },
+  { name: 'Marketing & nguồn khách', icon: Activity, short: 'Marketing', href: '/marketing-nguon-khach' },
+  { name: 'Dự báo & cảnh báo', icon: Bell, short: 'Cảnh báo', href: '/du-bao-canh-bao' },
 ];
 
 const pageDetails = [
@@ -119,7 +121,9 @@ interface CrmDashboardData {
 }
 
 export default function Dashboard() {
-  const [active, setActive] = useState(0);
+  const pathname = usePathname();
+  const router = useRouter();
+  const active = Math.max(0, sections.findIndex((section) => section.href === pathname));
   const [period, setPeriod] = useState('Tháng này');
   const [region, setRegion] = useState('Tất cả khu vực');
   const [channel, setChannel] = useState('Tất cả kênh');
@@ -274,7 +278,7 @@ export default function Dashboard() {
       <div className="workspace"><div className="workspace-avatar">A</div><div className="workspace-copy"><strong>Abraham Bike</strong><span>Quản trị điều hành</span></div><ChevronDown size={15}/></div>
       <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
       <nav className="main-nav" aria-label="Điều hướng chính">
-        {sections.map((item, index) => { const Icon = item.icon; return <button key={item.name} className={`nav-item ${active === index ? 'active' : ''}`} onClick={() => { setActive(index); setMenuOpen(false); }}><Icon size={17}/><span>{item.name}</span>{index === 8 && <span className="nav-badge">{crmData?.tasks?.length || 4}</span>}</button>; })}
+        {sections.map((item, index) => { const Icon = item.icon; return <Link key={item.name} href={item.href} className={`nav-item ${active === index ? 'active' : ''}`} onClick={() => setMenuOpen(false)}><Icon size={17}/><span>{item.name}</span>{index === 8 && <span className="nav-badge">{crmData?.tasks?.length || 4}</span>}</Link>; })}
       </nav>
       <div className="sidebar-bottom"><div className="data-health"><span className="health-dot"/><div><strong>{crmData?.connected ? 'AMIS CRM · Đã kết nối' : 'Đang kết nối AMIS CRM'}</strong><small>{crmData?.connected ? `${crmData.clientId} · lúc ${syncTimeLabel}` : 'Đang tải dữ liệu...'}</small></div><MoreHorizontal size={17}/></div><button className="nav-item" onClick={() => loadAmisData(true)}><Settings2 size={17}/><span>Đồng bộ lại CRM</span></button><div className="profile"><div className="profile-avatar">TN</div><div className="profile-copy"><strong>Trần Ngọc Anh</strong><span>Giám đốc điều hành</span></div><MoreHorizontal size={18}/></div></div>
     </aside>
@@ -365,7 +369,7 @@ export default function Dashboard() {
         <section className="primary-grid"><article className="panel sales-panel"><div className="panel-heading"><div><h2>{active === 4 ? 'Dự kiến thu công nợ' : active === 8 ? 'Tiến độ và dự báo KPI tháng' : `Doanh số đã ghi theo ${salesPeriodView === 'week' ? 'tuần' : 'tháng'} (AMIS CRM · ${weeklyReportPeriod})`}</h2><p>{active === 4 ? 'Dòng tiền thực thu và phải thu trên đơn hàng' : `Nguồn: Báo cáo tiến độ thực hiện doanh số tuần AMIS CRM · ${weeklyReportPeriod}.`}</p></div><label className="select-chip"><select aria-label="Kiểu tổng hợp doanh số" value={salesPeriodView} onChange={e => setSalesPeriodView(e.target.value as 'week' | 'month')}><option value="week">Theo tuần</option><option value="month">Theo tháng</option></select><ChevronDown size={13}/></label></div><div className="chart-legend"><span><i className="legend-dot green"/> Thực hiện (Báo cáo AMIS)</span></div><div className="chart-wrap"><div className="y-labels"><span>Cao nhất</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div className="chart"><div className="grid-lines"><i/><i/><i/><i/><i/></div><div className="bars">{salesPeriodBuckets.map((bucket, i) => <div className="bar-slot" key={bucket.label} title={`${bucket.label}: ${bucket.value.toLocaleString('vi-VN')} ₫`}><span className={`bar ${i === salesPeriodBuckets.length - 1 ? 'bar-highlight' : ''}`} style={{height: `${bucket.height}%`}}/></div>)}</div><div className="x-labels">{salesPeriodBuckets.map(bucket => <span key={bucket.label}>{bucket.label}</span>)}</div></div></div><div className="chart-bottom"><div><span>Tổng doanh số</span><strong>{reportTotal.toLocaleString('vi-VN')} ₫</strong></div><div><span>Trung bình / ngày</span><strong>{reportAverageDaily.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} ₫</strong></div><div><span>Mục tiêu tháng</span><strong>{kpiTarget > 0 ? `${kpiTarget.toLocaleString('vi-VN')} ₫` : 'Chưa nhập KPI'}</strong></div></div></article>
           <article className="panel region-panel"><div className="panel-heading"><div><h2>{active === 2 ? 'Đại lý theo khu vực' : 'Doanh số T11 theo khu vực'}</h2><p>Phân bổ từ 59 đơn đã ghi tháng 11/2026</p></div><button className="icon-button small" onClick={() => notify('Đang mở chi tiết khu vực')}><MoreHorizontal size={18}/></button></div><div className="region-summary"><div className="region-total">{crmData?.summary?.totalSalesShort || '513,49 tr'}</div><span className="growth-pill"><ArrowUpRight size={13}/> {crmData?.counts?.orders || 59} đơn T11</span></div><div className="region-chart"><div className="region-y"><span>100%</span><span>66%</span><span>33%</span><span>0</span></div><div className="region-bars"><div className="region-grid"><i/><i/><i/><i/></div>{regionalBars.map((item) => <div className="region-column" key={item.name}><span className="region-bar" style={{height:`${item.heightPercent}%`,background:item.color}}/><small>{item.name}</small></div>)}</div></div><div className="region-legend">{regionalBars.slice(0, 3).map((item) => <span key={item.name}><i style={{background:item.color}}/> {item.name} <b>{item.valueFormatted}</b></span>)}</div></article></section>
         <section className="secondary-grid"><article className="panel table-panel"><div className="panel-heading table-heading"><div><h2>{tableView === 'staff' ? 'Doanh số đã ghi theo Nhân viên (T11/2026)' : 'Doanh số đã ghi theo Đại lý (T11/2026)'}</h2><p>{tableView === 'staff' ? '10 nhân viên có doanh số đã ghi tháng 11/2026 trên AMIS CRM (Tổng: 513.485.805 ₫)' : 'Các đại lý phát sinh đơn hàng đã ghi trong tháng 11/2026'}</p></div><div className="table-tools"><label className="search-box"><Search size={14}/><input aria-label="Tìm kiếm" placeholder={tableView === 'staff' ? 'Tìm nhân viên, bộ phận...' : 'Tìm đại lý, tỉnh thành...'} value={query} onChange={e => setQuery(e.target.value)}/></label><button className="text-button" onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>{tableView === 'staff' ? 'Xem theo Đại lý' : 'Xem theo Nhân viên'} <ArrowRight size={14}/></button></div></div><div className="table-scroll"><table><thead><tr><th>{tableView === 'staff' ? 'NHÂN VIÊN' : 'ĐẠI LÝ / KHÁCH HÀNG'}</th><th>{tableView === 'staff' ? 'ĐƠN VỊ / BỘ PHẬN' : 'TỈNH / KHU VỰC'}</th><th>ĐÃ THỰC HIỆN (CRM)</th><th>SỐ ĐƠN / TỶ LỆ</th><th>TRẠNG THÁI</th><th/></tr></thead><tbody>{filteredRows.slice(0, 12).map((row) => <tr key={row.name}><td><span className="table-avatar">{row.name.split(' ').map(word => word[0]).slice(-2).join('').toUpperCase()}</span><strong>{row.name}</strong></td><td>{row.province}</td><td className="amount-cell">{row.salesFormatted}</td><td><span className="change-up"><ArrowUpRight size={13}/> {row.ratioFormatted}</span></td><td><span className={`status ${row.status === 'Còn công nợ' ? 'status-warn' : ''}`}><i/>{row.status}</span></td><td><button className="row-more" aria-label={`Tùy chọn ${row.name}`} onClick={() => notify(`Đang xem: ${row.name} (${row.salesFormatted})`)}><MoreHorizontal size={17}/></button></td></tr>)}{filteredRows.length === 0 && <tr><td className="empty-row" colSpan={6}>Không tìm thấy dữ liệu phù hợp</td></tr>}</tbody></table></div><div className="table-footer"><span>Hiển thị <b>{Math.min(12, filteredRows.length)}</b> / <b>{filteredRows.length}</b> {tableView === 'staff' ? 'nhân viên' : 'đại lý'} · Tổng đơn đã ghi T11: <b>{crmData?.summary?.totalSalesFormatted || '513.485.805 ₫'}</b></span><div><button disabled>‹</button><button className="current-page">1</button><button onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>2</button></div></div></article>
-          <article className="panel tasks-panel"><div className="panel-heading"><div><h2>Thông tin & Việc cần xử lý (CRM)</h2><p>Tổng hợp trực tiếp từ dữ liệu tháng 11/2026</p></div><button className="task-count" onClick={() => setActive(8)}>{crmData?.tasks?.length || 4} <ArrowRight size={14}/></button></div><div className="task-list">
+          <article className="panel tasks-panel"><div className="panel-heading"><div><h2>Thông tin & Việc cần xử lý (CRM)</h2><p>Tổng hợp trực tiếp từ dữ liệu tháng 11/2026</p></div><button className="task-count" onClick={() => router.push('/du-bao-canh-bao')}>{crmData?.tasks?.length || 4} <ArrowRight size={14}/></button></div><div className="task-list">
             {crmData?.connected && crmData.tasks ? (
               crmData.tasks.map((t, idx) => (
                 <button className="task-item" key={idx} onClick={() => notify(t.title)}>
@@ -384,7 +388,7 @@ export default function Dashboard() {
                 <button className="task-item" onClick={() => notify('Đang tải dữ liệu từ AMIS CRM')}><span className="task-mark task-blue"><TrendingUp size={15}/></span><span className="task-copy"><strong>Đang đồng bộ doanh số tháng 11/2026</strong><small>Từ MISA AMIS CRM</small></span><span className="priority priority-watch">CRM</span></button>
               </>
             )}
-          </div><button className="all-tasks" onClick={() => setActive(8)}>Xem tất cả cảnh báo <ArrowRight size={14}/></button></article></section>
+          </div><button className="all-tasks" onClick={() => router.push('/du-bao-canh-bao')}>Xem tất cả cảnh báo <ArrowRight size={14}/></button></article></section>
         <footer className="page-footer"><span><Clock3 size={13}/> Đồng bộ lần cuối: {syncTimeLabel}</span><span>Nguồn dữ liệu: {crmData?.source || 'AMIS CRM'} <i/> Đơn vị tiền tệ: VND</span></footer>
       </div>
     </main>

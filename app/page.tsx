@@ -169,9 +169,20 @@ export default function Dashboard() {
 
   const loadWeeklyReport = useCallback(async (month: string, byEmployee: boolean) => {
     setLoadingCrm(true);
-    setReportSyncing(true);
-    setReportSyncMessage('Đang gửi yêu cầu đồng bộ...');
     try {
+      // Các tháng đã cào xong được đọc ngay từ Supabase; không tạo job mới
+      // và không buộc người dùng phải chờ Bikeforce thêm lần nữa.
+      const cached = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}&storedOnly=true`, { cache: 'no-store' });
+      if (cached.status === 200) {
+        const report = await cached.json();
+        setCrmData(current => current ? { ...current, salesByWeek: report.salesByWeek, weeklyReport: report.weeklyReport } : current);
+        setReportRows(Array.isArray(report.rows) ? report.rows : []);
+        notify(`Đã tải báo cáo ${report.weeklyReport.monthLabel}/${report.weeklyReport.year}${byEmployee ? ' theo nhân viên' : ''}`);
+        return;
+      }
+
+      setReportSyncing(true);
+      setReportSyncMessage('Đang gửi yêu cầu đồng bộ...');
       const queued = await fetch('/api/crm-weekly-report/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) });
       if (!queued.ok && queued.status !== 202) {
         const error = await queued.json();
@@ -404,7 +415,7 @@ export default function Dashboard() {
           })}
         </section>
         <section className="report-controls" aria-label="Tham số báo cáo doanh số tuần">
-          <label>Tháng <input type="month" value={reportMonth} onChange={event => { setReportMonth(event.target.value); if (salesPeriodView === 'month') loadMonthlyTrend(event.target.value); }} /></label>
+          <label>Tháng <input type="month" value={reportMonth} onChange={event => { const month = event.target.value; setReportMonth(month); void loadWeeklyReport(month, reportByEmployee); if (salesPeriodView === 'month') loadMonthlyTrend(month); }} /></label>
           <label><input type="checkbox" checked={reportByEmployee} onChange={event => setReportByEmployee(event.target.checked)} /> Xem chi tiết theo nhân viên</label>
           <button className="button button-primary" onClick={() => loadWeeklyReport(reportMonth, reportByEmployee)} disabled={loadingCrm}>Đồng bộ</button>
         </section>

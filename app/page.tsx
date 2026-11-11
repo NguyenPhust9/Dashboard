@@ -139,6 +139,8 @@ export default function Dashboard() {
   const [reportMonth, setReportMonth] = useState('2026-10');
   const [reportByEmployee, setReportByEmployee] = useState(false);
   const [reportRows, setReportRows] = useState<Array<Record<string, unknown>>>([]);
+  const [reportSyncing, setReportSyncing] = useState(false);
+  const [reportSyncMessage, setReportSyncMessage] = useState('Đang gửi yêu cầu đồng bộ...');
 
   function notify(message: string) {
     setNotice(message);
@@ -167,6 +169,8 @@ export default function Dashboard() {
 
   const loadWeeklyReport = useCallback(async (month: string, byEmployee: boolean) => {
     setLoadingCrm(true);
+    setReportSyncing(true);
+    setReportSyncMessage('Đang gửi yêu cầu đồng bộ...');
     try {
       const queued = await fetch('/api/crm-weekly-report/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) });
       if (!queued.ok && queued.status !== 202) {
@@ -174,6 +178,7 @@ export default function Dashboard() {
         throw new Error(error.error || 'Không thể yêu cầu đồng bộ báo cáo.');
       }
       notify(`Đã gửi yêu cầu đồng bộ báo cáo tháng ${month}. Đang chờ Bikeforce xử lý...`);
+      setReportSyncMessage('Bikeforce đang lấy dữ liệu từ AMIS CRM...');
       let response: Response | null = null;
       for (let attempt = 0; attempt < 36; attempt += 1) {
         response = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}&storedOnly=true`, { cache: 'no-store' });
@@ -189,6 +194,7 @@ export default function Dashboard() {
       notify(error instanceof Error ? error.message : 'Không tải được báo cáo tuần.');
     } finally {
       setLoadingCrm(false);
+      setReportSyncing(false);
     }
   }, []);
 
@@ -430,5 +436,13 @@ export default function Dashboard() {
       </div>
     </main>
     {notice && <div className="toast"><span className="toast-check">✓</span>{notice}</div>}
+    {reportSyncing && <div className="report-sync-overlay" role="status" aria-live="polite">
+      <div className="report-sync-popup">
+        <div className="report-sync-icon"><Bike size={34} strokeWidth={2.2}/></div>
+        <strong>Đang xử lý...</strong>
+        <span>{reportSyncMessage}</span>
+        <div className="report-sync-dots"><i/><i/><i/></div>
+      </div>
+    </div>}
   </div>;
 }

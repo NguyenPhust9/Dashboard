@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { supabaseRestRequest } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Bạn cần đăng nhập để đồng bộ báo cáo.' }, { status: 401 });
-
   const body = await request.json().catch(() => null) as { month?: unknown } | null;
   const month = typeof body?.month === 'string' ? body.month : '';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {

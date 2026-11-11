@@ -173,6 +173,7 @@ export default function Dashboard() {
         const error = await queued.json();
         throw new Error(error.error || 'Không thể yêu cầu đồng bộ báo cáo.');
       }
+      notify(`Đã gửi yêu cầu đồng bộ báo cáo tháng ${month}. Đang chờ Bikeforce xử lý...`);
       let response: Response | null = null;
       for (let attempt = 0; attempt < 36; attempt += 1) {
         response = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}&storedOnly=true`, { cache: 'no-store' });

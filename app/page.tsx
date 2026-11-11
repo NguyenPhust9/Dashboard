@@ -168,9 +168,19 @@ export default function Dashboard() {
   const loadWeeklyReport = useCallback(async (month: string, byEmployee: boolean) => {
     setLoadingCrm(true);
     try {
-      const response = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}`, { cache: 'no-store' });
+      const queued = await fetch('/api/crm-weekly-report/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) });
+      if (!queued.ok && queued.status !== 202) {
+        const error = await queued.json();
+        throw new Error(error.error || 'Không thể yêu cầu đồng bộ báo cáo.');
+      }
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 36; attempt += 1) {
+        response = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}&storedOnly=true`, { cache: 'no-store' });
+        if (response.ok) break;
+        await new Promise(resolve => window.setTimeout(resolve, 5000));
+      }
+      if (!response?.ok) throw new Error('Đã gửi yêu cầu. Bikeforce sẽ đồng bộ khi worker chạy; hãy thử lại sau ít phút.');
       const report = await response.json();
-      if (!response.ok) throw new Error(report.error || 'Không tải được báo cáo tuần.');
       setCrmData(current => current ? { ...current, salesByWeek: report.salesByWeek, weeklyReport: report.weeklyReport } : current);
       setReportRows(Array.isArray(report.rows) ? report.rows : []);
       notify(`Đã tải báo cáo ${report.weeklyReport.monthLabel}/${report.weeklyReport.year}${byEmployee ? ' theo nhân viên' : ''}`);

@@ -110,6 +110,9 @@ export async function GET(request: NextRequest) {
   try {
     const storedReport = await loadStoredReport26(month);
     if (storedReport) return NextResponse.json(responseFromReport26(storedReport, byEmployee));
+    if (request.nextUrl.searchParams.get('storedOnly') === 'true') {
+      return NextResponse.json({ pending: true }, { status: 202 });
+    }
 
     const { token, cookie, companyCode } = await getAmisCredentials();
     const parameters = reportParameters(month, byEmployee);

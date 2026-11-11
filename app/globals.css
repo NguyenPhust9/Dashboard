@@ -813,6 +813,25 @@ button {
 .report-detail-view { margin-bottom: 18px; }
 .report-detail-view + .primary-grid > .sales-panel { display: none; }
 
+.report-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0; }
+.insight-card { min-height: 300px; padding: 20px; border: 1px solid #e1e6ec; border-radius: 14px; background: #fff; }
+.insight-card h2 { margin: 0 0 18px; color: #14223a; font-size: 17px; }
+.insight-card p { margin: 17px 0 0; color: #53657d; font-size: 13px; line-height: 1.45; }
+.insight-bar-row { display: grid; grid-template-columns: 112px minmax(60px, 1fr) 48px; align-items: center; gap: 10px; margin: 12px 0; font-size: 14px; color: #12213a; }
+.insight-bar-row > i { height: 17px; overflow: hidden; border-radius: 5px; background: #e9efff; }
+.insight-bar-row > i b { display: block; height: 100%; border-radius: inherit; background: #2854d9; }
+.insight-bar-row strong, .debt-row strong { text-align: right; font-size: 14px; }
+.vehicle-card .insight-bar-row > i { background: #ffede4; }
+.vehicle-card .insight-bar-row > i b { background: #d74a0b; }
+.debt-stack { display: grid; grid-template-columns: 40% 28% 20% 12%; height: 26px; overflow: hidden; margin: 2px 0 18px; border-radius: 6px; }
+.debt-stack i:nth-child(1) { background: #96a3b8; }
+.debt-stack i:nth-child(2) { background: #f5b938; }
+.debt-stack i:nth-child(3) { background: #ed5707; }
+.debt-stack i:nth-child(4) { background: #b7221c; }
+.debt-row { display: flex; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #edf0f4; color: #14223a; font-size: 14px; }
+.debt-row.overdue strong { color: #dc310d; }
+.debt-card p { margin-top: 13px; }
+
 .report-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1579,6 +1598,7 @@ td strong {
   .primary-grid, .secondary-grid {
     grid-template-columns: 1fr;
   }
+  .report-insights { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

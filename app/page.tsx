@@ -176,7 +176,7 @@ export default function Dashboard() {
       let response: Response | null = null;
       for (let attempt = 0; attempt < 36; attempt += 1) {
         response = await fetch(`/api/crm-weekly-report?month=${month}&byEmployee=${byEmployee}&storedOnly=true`, { cache: 'no-store' });
-        if (response.ok) break;
+        if (response.status === 200) break;
         await new Promise(resolve => window.setTimeout(resolve, 5000));
       }
       if (!response?.ok) throw new Error('Đã gửi yêu cầu. Bikeforce sẽ đồng bộ khi worker chạy; hãy thử lại sau ít phút.');

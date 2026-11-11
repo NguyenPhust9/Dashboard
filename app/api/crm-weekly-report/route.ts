@@ -6,6 +6,32 @@ function envValue(raw: string, key: string) {
   return raw.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1]?.trim() || '';
 }
 
+async function getAmisCredentials() {
+  // Vercel does not have access to the local BikeForce .env file. Prefer its
+  // environment variables there, while retaining the local-file fallback.
+  const token = process.env.AMIS_BEARER_TOKEN || '';
+  const companyCode = process.env.AMIS_COMPANY_CODE || '';
+  const cookie = process.env.AMIS_COOKIE || '';
+  if (token && companyCode) return { token, companyCode, cookie };
+
+  const sourceEnvPath = process.env.BIKEFORCE_AMIS_ENV_FILE;
+  if (!sourceEnvPath) {
+    throw new Error('Thiếu AMIS_BEARER_TOKEN hoặc AMIS_COMPANY_CODE trong Environment Variables.');
+  }
+
+  const env = await readFile(sourceEnvPath, 'utf8');
+  const fileToken = envValue(env, 'AMIS_BEARER_TOKEN');
+  const fileCompanyCode = envValue(env, 'AMIS_COMPANY_CODE');
+  if (!fileToken || !fileCompanyCode) {
+    throw new Error('File BikeForce thiếu AMIS_BEARER_TOKEN hoặc AMIS_COMPANY_CODE.');
+  }
+  return {
+    token: fileToken,
+    companyCode: fileCompanyCode,
+    cookie: envValue(env, 'AMIS_COOKIE'),
+  };
+}
+
 function isoDate(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month - 1, day)).toISOString();
 }
@@ -42,16 +68,15 @@ export async function GET(request: NextRequest) {
   const byEmployee = request.nextUrl.searchParams.get('byEmployee') === 'true';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return NextResponse.json({ error: 'Tháng không hợp lệ.' }, { status: 400 });
   try {
-    const sourceEnvPath = process.env.BIKEFORCE_AMIS_ENV_FILE;
-    if (!sourceEnvPath) throw new Error('Chưa cấu hình BIKEFORCE_AMIS_ENV_FILE.');
-    const env = await readFile(sourceEnvPath, 'utf8');
-    const token = envValue(env, 'AMIS_BEARER_TOKEN');
-    const cookie = envValue(env, 'AMIS_COOKIE');
-    const companyCode = envValue(env, 'AMIS_COMPANY_CODE');
+    const { token, cookie, companyCode } = await getAmisCredentials();
     const parameters = reportParameters(month, byEmployee);
+    const headers: Record<string, string> = {
+      Accept: 'application/json, text/plain, */*', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', companycode: companyCode, layoutcode: 'Report', 'X-MISA-Language': 'vi-VN', Origin: 'https://amisapp.misa.vn', Referer: 'https://amisapp.misa.vn/crm/report/view/26/0',
+    };
+    if (cookie) headers.Cookie = cookie;
     const response = await fetch('https://amisapp.misa.vn/crm/g1/api/report/report/Grid', {
       method: 'POST', cache: 'no-store',
-      headers: { Accept: 'application/json, text/plain, */*', Authorization: `Bearer ${token}`, Cookie: cookie, 'Content-Type': 'application/json', companycode: companyCode, layoutcode: 'Report', 'X-MISA-Language': 'vi-VN', Origin: 'https://amisapp.misa.vn', Referer: 'https://amisapp.misa.vn/crm/report/view/26/0' },
+      headers,
       body: JSON.stringify({ ID: 26, IsGetCache: false, Data: parameters }),
     });
     const payload = await response.json();

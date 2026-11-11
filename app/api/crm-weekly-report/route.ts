@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
+import { supabaseRestRequest } from '@/lib/supabase';
 
 
 function envValue(raw: string, key: string) {
@@ -63,11 +64,53 @@ function reportParameters(monthValue: string, byEmployee: boolean) {
   return data;
 }
 
+type StoredReport26Payload = {
+  month?: string;
+  generatedAt?: string;
+  parameters?: Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  rows?: unknown[];
+};
+
+function responseFromReport26(payload: StoredReport26Payload, byEmployee: boolean) {
+  const summary = payload.summary || {};
+  const names = ['First', 'Second', 'Third', 'Forth', 'Fifth'];
+  const month = payload.month || '';
+  return {
+    weeklyReport: {
+      monthLabel: `Tháng ${Number(month.slice(5))}`,
+      year: Number(month.slice(0, 4)),
+      total: Number(summary.DoneOfMonth || 0),
+      totalFormatted: `${Number(summary.DoneOfMonth || 0).toLocaleString('vi-VN')} ₫`,
+    },
+    salesByWeek: names.map((name, index) => ({
+      label: `Tuần ${index + 1}`,
+      value: Number(summary[`DoneOf${name}Week`] || 0),
+    })),
+    rows: Array.isArray(payload.rows) ? payload.rows : [],
+    byEmployee,
+  };
+}
+
+async function loadStoredReport26(month: string): Promise<StoredReport26Payload | null> {
+  try {
+    const rows = await supabaseRestRequest<Array<{ payload?: StoredReport26Payload }>>('amis_report26_snapshots', {
+      query: `select=payload&period_month=eq.${month}-01&limit=1`,
+    });
+    return rows[0]?.payload || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const month = request.nextUrl.searchParams.get('month') || '2026-10';
   const byEmployee = request.nextUrl.searchParams.get('byEmployee') === 'true';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return NextResponse.json({ error: 'Tháng không hợp lệ.' }, { status: 400 });
   try {
+    const storedReport = await loadStoredReport26(month);
+    if (storedReport) return NextResponse.json(responseFromReport26(storedReport, byEmployee));
+
     const { token, cookie, companyCode } = await getAmisCredentials();
     const parameters = reportParameters(month, byEmployee);
     const headers: Record<string, string> = {
@@ -81,9 +124,13 @@ export async function GET(request: NextRequest) {
     });
     const payload = await response.json();
     if (!response.ok || !payload.Success) throw new Error(`AMIS report 26 HTTP ${response.status}`);
-    const names = ['First', 'Second', 'Third', 'Forth', 'Fifth'];
-    const weeklyReport = { monthLabel: `Tháng ${Number(month.slice(5))}`, year: Number(month.slice(0, 4)), total: Number(payload.SummaryData.DoneOfMonth || 0), totalFormatted: `${Number(payload.SummaryData.DoneOfMonth || 0).toLocaleString('vi-VN')} ₫` };
-    return NextResponse.json({ weeklyReport, salesByWeek: names.map((name: string, index) => ({ label: `Tuần ${index + 1}`, value: Number(payload.SummaryData[`DoneOf${name}Week`] || 0) })), rows: payload.Data, byEmployee });
+    return NextResponse.json(responseFromReport26({
+      month,
+      generatedAt: new Date().toISOString(),
+      parameters,
+      summary: payload.SummaryData,
+      rows: payload.Data,
+    }, byEmployee));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Không thể lấy báo cáo AMIS.' }, { status: 502 });
   }

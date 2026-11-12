@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
+import { supabaseRestRequest } from '@/lib/supabase';
 
 interface AccountingCollectionSnapshot {
   month?: string;
@@ -35,6 +36,18 @@ async function loadAccountingCollections(month: string): Promise<{ total: number
 }
 
 async function loadAccountingReceivable(): Promise<{ total: number; overdue: number; current: number; updatedAt?: string } | null> {
+  try {
+    const snapshots = await supabaseRestRequest<Array<{ generated_at?: string; payload?: AccountingOverviewSnapshot }>>('amis_accounting_overview_snapshots', {
+      query: 'select=generated_at,payload&order=period_month.desc&limit=1',
+    });
+    const snapshot = snapshots[0];
+    const total = Number(snapshot?.payload?.receivable?.total);
+    const overdue = Number(snapshot?.payload?.receivable?.overdue);
+    const current = Number(snapshot?.payload?.receivable?.current);
+    if ([total, overdue, current].every(Number.isFinite)) return { total, overdue, current, updatedAt: snapshot?.generated_at };
+  } catch {
+    // Local file remains a development fallback; deployment uses Supabase snapshot.
+  }
   const snapshotPath = process.env.AMIS_ACCOUNTING_OVERVIEW_FILE;
   if (!snapshotPath) return null;
 

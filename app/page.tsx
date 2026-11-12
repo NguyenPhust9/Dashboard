@@ -134,6 +134,18 @@ interface ProductSalesRow {
   misaCode: string;
 }
 
+interface ReceivableAgeValues {
+  totalDebt: number;
+  noDueDate: number;
+  beforeDue0To30: number;
+  overdue1To30: number;
+  overdue31To60: number;
+  overdue61To90: number;
+  overdue91To120: number;
+  overdueOver120: number;
+  totalOverdue: number;
+}
+
 const fallbackRegionalInsightRows: RegionalSalesRow[] = [
   { name: 'Miền Tây', value: 191_500_000, organizationUnitId: 0, misaCode: 'fallback-mien-tay' },
   { name: 'Miền Đông & TP.HCM', value: 194_500_000, organizationUnitId: 0, misaCode: 'fallback-mien-dong-hcm' },
@@ -161,6 +173,7 @@ export default function Dashboard() {
   const [reportRows, setReportRows] = useState<Array<Record<string, unknown>>>([]);
   const [regionalSalesRows, setRegionalSalesRows] = useState<RegionalSalesRow[]>([]);
   const [productSalesRows, setProductSalesRows] = useState<ProductSalesRow[]>([]);
+  const [receivableAge, setReceivableAge] = useState<ReceivableAgeValues | null>(null);
   const [reportSyncing, setReportSyncing] = useState(false);
   const [reportSyncMessage, setReportSyncMessage] = useState('Đang gửi yêu cầu đồng bộ...');
 
@@ -208,6 +221,19 @@ export default function Dashboard() {
       if (!response.ok) return false;
       const data = await response.json() as { rows?: ProductSalesRow[] };
       setProductSalesRows(Array.isArray(data.rows) ? data.rows : []);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const loadReceivableAge = useCallback(async (month: string) => {
+    try {
+      const response = await fetch(`/api/crm-receivable-age?month=${month}`, { cache: 'no-store' });
+      if (!response.ok) return false;
+      const data: { values?: ReceivableAgeValues } = await response.json();
+      if (!data.values) return false;
+      setReceivableAge(data.values);
       return true;
     } catch {
       return false;
@@ -288,7 +314,8 @@ export default function Dashboard() {
     loadAmisData(false);
     void loadRegionalSales(reportMonth);
     void loadProductSales(reportMonth);
-  }, [loadAmisData, loadProductSales, loadRegionalSales, reportMonth]);
+    void loadReceivableAge(reportMonth);
+  }, [loadAmisData, loadProductSales, loadReceivableAge, loadRegionalSales, reportMonth]);
 
   useEffect(() => {
     const savedTarget = Number(window.localStorage.getItem('abraham-bike-kpi-target') || 0);
@@ -343,6 +370,35 @@ export default function Dashboard() {
       valueFormatted: `${(row.value / 1_000_000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} tr`,
     }));
   }, [productSalesRows]);
+
+  const debtAgeRows = useMemo(() => {
+    const values = receivableAge || {
+      noDueDate: 1_639_428_887, beforeDue0To30: 228_954_450,
+      overdue1To30: 730_634_530, overdue31To60: 959_724_639,
+      overdue61To90: 802_800_880, overdue91To120: 297_571_550,
+      overdueOver120: 1_973_328_709,
+    };
+    const format = (value: number) => value >= 1_000_000_000
+      ? `${(value / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ`
+      : `${(value / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tr`;
+    return [
+      ['Không có hạn nợ', format(values.noDueDate)],
+      ['Nợ trước hạn 0–30 ngày', format(values.beforeDue0To30)],
+      ['Quá hạn 1–30 ngày', format(values.overdue1To30)],
+      ['Quá hạn 31–60 ngày', format(values.overdue31To60)],
+      ['Quá hạn 61–90 ngày', format(values.overdue61To90)],
+      ['Quá hạn 91–120 ngày', format(values.overdue91To120)],
+      ['Quá hạn trên 120 ngày', format(values.overdueOver120)],
+    ];
+  }, [receivableAge]);
+  const debtAgeSummary = useMemo(() => {
+    const totalOverdue = receivableAge?.totalOverdue ?? 4_764_060_308;
+    const totalDebt = receivableAge?.totalDebt ?? 6_632_443_645;
+    return {
+      totalOverdue: `${(totalOverdue / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ`,
+      totalDebt: `${(totalDebt / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ`,
+    };
+  }, [receivableAge]);
 
   const sourceRows: TableRowItem[] = useMemo(() => {
     if (!crmData?.connected) return fallbackSalesRows;
@@ -494,7 +550,7 @@ export default function Dashboard() {
         <section className="report-insights" aria-label="Phân tích bổ sung">
           <article className="insight-card"><div className="panel-heading"><h2>Doanh số theo khu vực</h2><button className="text-button" onClick={async () => { const loaded = await loadRegionalSales(reportMonth); notify(loaded ? 'Đã tải lại doanh số theo khu vực.' : 'Chưa thể tải snapshot khu vực; đang hiển thị dữ liệu dự phòng.'); }}>Tải lại khu vực</button></div>{regionalInsightRows.map((item) => <div className="insight-bar-row" key={item.misaCode || item.name}><span>{item.name}</span><i><b style={{ width: `${item.width}%` }}/></i><strong>{item.valueFormatted}</strong></div>)}</article>
           <article className="insight-card vehicle-card"><div className="panel-heading"><h2>Doanh số theo dòng xe</h2><button className="text-button" onClick={async () => { const loaded = await loadProductSales(reportMonth); notify(loaded ? 'Đã tải lại doanh số theo dòng xe.' : 'Chưa có snapshot doanh số theo dòng xe cho tháng đã chọn.'); }}>Tải lại dòng xe</button></div>{productInsightRows.length > 0 ? productInsightRows.map((item) => <div className="insight-bar-row" key={item.misaCode || item.name}><span>{item.name}</span><i><b style={{ width: `${item.width}%` }}/></i><strong>{item.valueFormatted}</strong></div>) : <p>Chưa có snapshot doanh số theo dòng xe cho tháng đã chọn.</p>}</article>
-          <article className="insight-card debt-card"><h2>Công nợ theo tuổi nợ</h2><div className="debt-stack"><i/><i/><i/><i/></div>{[['Chưa đến hạn', '00,0 tỷ'], ['1–30 ngày', '00,0 tỷ'], ['31–60 ngày', '00,0 tỷ'], ['61–90 ngày', '00,0 tỷ'], ['Trên 90 ngày', '00,0 tỷ']].map(([label, value], index) => <div className={`debt-row ${index === 4 ? 'overdue' : ''}`} key={label}><span>{label}</span><strong>{value}</strong></div>)}<p>Đến hạn trong 7 ngày: 00,0 tỷ · Vượt hạn mức: 00 đại lý</p></article>
+          <article className="insight-card debt-card"><div className="panel-heading"><h2>Công nợ theo tuổi nợ</h2><button className="text-button" onClick={async () => { const loaded = await loadReceivableAge(reportMonth); notify(loaded ? 'Đã tải lại công nợ theo tuổi nợ.' : 'Chưa có snapshot công nợ cho tháng đã chọn.'); }}>Tải lại công nợ</button></div><div className="debt-stack"><i/><i/><i/><i/></div>{debtAgeRows.map(([label, value], index) => <div className={`debt-row ${index >= 2 ? 'overdue' : ''}`} key={label}><span>{label}</span><strong>{value}</strong></div>)}<p>Tổng nợ quá hạn: {debtAgeSummary.totalOverdue} · Tổng công nợ: {debtAgeSummary.totalDebt}</p></article>
         </section>
         <section className="secondary-grid"><article className="panel table-panel"><div className="panel-heading table-heading"><div><h2>{tableView === 'staff' ? 'Doanh số đã ghi theo Nhân viên (T11/2026)' : 'Doanh số đã ghi theo Đại lý (T11/2026)'}</h2><p>{tableView === 'staff' ? '10 nhân viên có doanh số đã ghi tháng 11/2026 trên AMIS CRM (Tổng: 513.485.805 ₫)' : 'Các đại lý phát sinh đơn hàng đã ghi trong tháng 11/2026'}</p></div><div className="table-tools"><label className="search-box"><Search size={14}/><input aria-label="Tìm kiếm" placeholder={tableView === 'staff' ? 'Tìm nhân viên, bộ phận...' : 'Tìm đại lý, tỉnh thành...'} value={query} onChange={e => setQuery(e.target.value)}/></label><button className="text-button" onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>{tableView === 'staff' ? 'Xem theo Đại lý' : 'Xem theo Nhân viên'} <ArrowRight size={14}/></button></div></div><div className="table-scroll"><table><thead><tr><th>{tableView === 'staff' ? 'NHÂN VIÊN' : 'ĐẠI LÝ / KHÁCH HÀNG'}</th><th>{tableView === 'staff' ? 'ĐƠN VỊ / BỘ PHẬN' : 'TỈNH / KHU VỰC'}</th><th>ĐÃ THỰC HIỆN (CRM)</th><th>SỐ ĐƠN / TỶ LỆ</th><th>TRẠNG THÁI</th><th/></tr></thead><tbody>{filteredRows.slice(0, 12).map((row) => <tr key={row.name}><td><span className="table-avatar">{row.name.split(' ').map(word => word[0]).slice(-2).join('').toUpperCase()}</span><strong>{row.name}</strong></td><td>{row.province}</td><td className="amount-cell">{row.salesFormatted}</td><td><span className="change-up"><ArrowUpRight size={13}/> {row.ratioFormatted}</span></td><td><span className={`status ${row.status === 'Còn công nợ' ? 'status-warn' : ''}`}><i/>{row.status}</span></td><td><button className="row-more" aria-label={`Tùy chọn ${row.name}`} onClick={() => notify(`Đang xem: ${row.name} (${row.salesFormatted})`)}><MoreHorizontal size={17}/></button></td></tr>)}{filteredRows.length === 0 && <tr><td className="empty-row" colSpan={6}>Không tìm thấy dữ liệu phù hợp</td></tr>}</tbody></table></div><div className="table-footer"><span>Hiển thị <b>{Math.min(12, filteredRows.length)}</b> / <b>{filteredRows.length}</b> {tableView === 'staff' ? 'nhân viên' : 'đại lý'} · Tổng đơn đã ghi T11: <b>{crmData?.summary?.totalSalesFormatted || '513.485.805 ₫'}</b></span><div><button disabled>‹</button><button className="current-page">1</button><button onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>2</button></div></div></article>
           <article className="panel tasks-panel"><div className="panel-heading"><div><h2>Thông tin & Việc cần xử lý (CRM)</h2><p>Tổng hợp trực tiếp từ dữ liệu tháng 11/2026</p></div><button className="task-count" onClick={() => router.push('/du-bao-canh-bao')}>{crmData?.tasks?.length || 4} <ArrowRight size={14}/></button></div><div className="task-list">

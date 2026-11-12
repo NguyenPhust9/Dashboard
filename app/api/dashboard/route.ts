@@ -613,9 +613,9 @@ export async function GET() {
           `${staffSales.length} nhân viên ghi doanh số`,
         ],
         [
-          accountingReceivable ? 'Công nợ quá hạn' : 'Còn phải thu (T11)',
-          formatVndExact(accountingReceivable?.overdue ?? novReceivable),
-          accountingReceivable ? `Tổng nợ: ${formatVndShort(accountingReceivable.total)}` : `${dealersSorted.filter((d) => d.status === 'Còn công nợ').length} đại lý`,
+          accountingReceivable ? 'Còn phải thu' : 'Còn phải thu (T11)',
+          formatVndExact(accountingReceivable?.total ?? novReceivable),
+          accountingReceivable ? `${formatVndShort(accountingReceivable.overdue)} quá hạn` : `${dealersSorted.filter((d) => d.status === 'Còn công nợ').length} đại lý`,
           accountingReceivable ? `${formatVndShort(accountingReceivable.current)} trong hạn` : `tổng đơn T11: ${formatVndShort(novGrossRecordedSales)}`,
         ],
       ],

@@ -8,6 +8,7 @@
     "start": "next start",
     "accounting:sync": "node scripts/accounting-sync.mjs",
     "crm:weekly-report:sync": "node scripts/crm-weekly-report-sync.mjs"
+    ,"crm:product-sales:sync": "node scripts/amis-product-sales-sync.mjs --month 2026-11"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

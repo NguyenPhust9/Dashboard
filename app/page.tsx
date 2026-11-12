@@ -127,6 +127,19 @@ interface RegionalSalesRow {
   misaCode: string;
 }
 
+interface ProductSalesRow {
+  name: string;
+  value: number;
+  productCategoryId: number;
+  misaCode: string;
+}
+
+const fallbackRegionalInsightRows: RegionalSalesRow[] = [
+  { name: 'Miền Tây', value: 191_500_000, organizationUnitId: 0, misaCode: 'fallback-mien-tay' },
+  { name: 'Miền Đông & TP.HCM', value: 194_500_000, organizationUnitId: 0, misaCode: 'fallback-mien-dong-hcm' },
+  { name: 'Miền Trung', value: 127_500_000, organizationUnitId: 0, misaCode: 'fallback-mien-trung' },
+];
+
 export default function Dashboard() {
   const pathname = usePathname();
   const router = useRouter();
@@ -143,10 +156,11 @@ export default function Dashboard() {
   const [kpiTarget, setKpiTarget] = useState(0);
   const [kpiTargetInput, setKpiTargetInput] = useState('');
   const [salesPeriodView, setSalesPeriodView] = useState<'week' | 'month'>('week');
-  const [reportMonth, setReportMonth] = useState('2026-10');
+  const [reportMonth, setReportMonth] = useState('2026-11');
   const [reportByEmployee, setReportByEmployee] = useState(false);
   const [reportRows, setReportRows] = useState<Array<Record<string, unknown>>>([]);
   const [regionalSalesRows, setRegionalSalesRows] = useState<RegionalSalesRow[]>([]);
+  const [productSalesRows, setProductSalesRows] = useState<ProductSalesRow[]>([]);
   const [reportSyncing, setReportSyncing] = useState(false);
   const [reportSyncMessage, setReportSyncMessage] = useState('Đang gửi yêu cầu đồng bộ...');
 
@@ -178,11 +192,25 @@ export default function Dashboard() {
   const loadRegionalSales = useCallback(async (month: string) => {
     try {
       const response = await fetch(`/api/crm-regional-sales?month=${month}`, { cache: 'no-store' });
-      if (!response.ok) return;
+      if (!response.ok) return false;
       const data = await response.json() as { rows?: RegionalSalesRow[] };
       setRegionalSalesRows(Array.isArray(data.rows) ? data.rows : []);
+      return true;
     } catch {
       // Report 26 may be ready a moment before the regional widget snapshot.
+      return false;
+    }
+  }, []);
+
+  const loadProductSales = useCallback(async (month: string) => {
+    try {
+      const response = await fetch(`/api/crm-product-sales?month=${month}`, { cache: 'no-store' });
+      if (!response.ok) return false;
+      const data = await response.json() as { rows?: ProductSalesRow[] };
+      setProductSalesRows(Array.isArray(data.rows) ? data.rows : []);
+      return true;
+    } catch {
+      return false;
     }
   }, []);
 
@@ -259,7 +287,8 @@ export default function Dashboard() {
   useEffect(() => {
     loadAmisData(false);
     void loadRegionalSales(reportMonth);
-  }, [loadAmisData, loadRegionalSales, reportMonth]);
+    void loadProductSales(reportMonth);
+  }, [loadAmisData, loadProductSales, loadRegionalSales, reportMonth]);
 
   useEffect(() => {
     const savedTarget = Number(window.localStorage.getItem('abraham-bike-kpi-target') || 0);
@@ -297,13 +326,23 @@ export default function Dashboard() {
   const reportTotal = crmData?.weeklyReport?.total ?? 1_972_566_196;
   const reportAverageDaily = reportTotal / Math.max(1, reportDays);
   const regionalInsightRows = useMemo(() => {
-    const max = Math.max(1, ...regionalSalesRows.map((row) => row.value));
-    return regionalSalesRows.map((row) => ({
+    const rows = regionalSalesRows.length > 0 ? regionalSalesRows : fallbackRegionalInsightRows;
+    const max = Math.max(1, ...rows.map((row) => row.value));
+    return rows.map((row) => ({
       ...row,
       width: Math.max(8, Math.round((row.value / max) * 100)),
       valueFormatted: `${(row.value / 1_000_000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} tr`,
     }));
   }, [regionalSalesRows]);
+
+  const productInsightRows = useMemo(() => {
+    const max = Math.max(1, ...productSalesRows.map((row) => row.value));
+    return productSalesRows.map((row) => ({
+      ...row,
+      width: Math.max(8, Math.round((row.value / max) * 100)),
+      valueFormatted: `${(row.value / 1_000_000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} tr`,
+    }));
+  }, [productSalesRows]);
 
   const sourceRows: TableRowItem[] = useMemo(() => {
     if (!crmData?.connected) return fallbackSalesRows;
@@ -453,8 +492,8 @@ export default function Dashboard() {
         <section className="primary-grid"><article className="panel sales-panel"><div className="panel-heading"><div><h2>{active === 4 ? 'Dự kiến thu công nợ' : active === 8 ? 'Tiến độ và dự báo KPI tháng' : `Doanh số đã ghi theo ${salesPeriodView === 'week' ? 'tuần' : 'tháng'} (AMIS CRM · ${weeklyReportPeriod})`}</h2><p>{active === 4 ? 'Dòng tiền thực thu và phải thu trên đơn hàng' : `Nguồn: Báo cáo tiến độ thực hiện doanh số tuần AMIS CRM · ${weeklyReportPeriod}.`}</p></div><label className="select-chip"><select aria-label="Kiểu tổng hợp doanh số" value={salesPeriodView} onChange={event => { const view = event.target.value as 'week' | 'month'; setSalesPeriodView(view); if (view === 'month') loadMonthlyTrend(reportMonth); }}><option value="week">Theo tuần</option><option value="month">Theo tháng</option></select><ChevronDown size={13}/></label></div><div className="chart-legend"><span><i className="legend-dot green"/> Thực hiện (Báo cáo AMIS)</span></div><div className="chart-wrap"><div className="y-labels"><span>Cao nhất</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div className="chart"><div className="grid-lines"><i/><i/><i/><i/><i/></div><div className="bars">{salesPeriodBuckets.map((bucket, i) => <div className="bar-slot" key={bucket.label} title={`${bucket.label}: ${bucket.value.toLocaleString('vi-VN')} ₫`}><span className={`bar ${i === salesPeriodBuckets.length - 1 ? 'bar-highlight' : ''}`} style={{height: `${bucket.height}%`}}/></div>)}</div><div className="x-labels">{salesPeriodBuckets.map(bucket => <span key={bucket.label}>{bucket.label}</span>)}</div></div></div><div className="chart-bottom"><div><span>Tổng doanh số</span><strong>{reportTotal.toLocaleString('vi-VN')} ₫</strong></div><div><span>Trung bình / ngày</span><strong>{reportAverageDaily.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} ₫</strong></div><div><span>Mục tiêu tháng</span><strong>{kpiTarget > 0 ? `${kpiTarget.toLocaleString('vi-VN')} ₫` : 'Chưa nhập KPI'}</strong></div></div></article>
           <article className="panel region-panel"><div className="panel-heading"><div><h2>{active === 2 ? 'Đại lý theo khu vực' : 'Doanh số T11 theo khu vực'}</h2><p>Phân bổ từ 59 đơn đã ghi tháng 11/2026</p></div><button className="icon-button small" onClick={() => notify('Đang mở chi tiết khu vực')}><MoreHorizontal size={18}/></button></div><div className="region-summary"><div className="region-total">{crmData?.summary?.totalSalesShort || '513,49 tr'}</div><span className="growth-pill"><ArrowUpRight size={13}/> {crmData?.counts?.orders || 59} đơn T11</span></div><div className="region-chart"><div className="region-y"><span>100%</span><span>66%</span><span>33%</span><span>0</span></div><div className="region-bars"><div className="region-grid"><i/><i/><i/><i/></div>{regionalBars.map((item) => <div className="region-column" key={item.name}><span className="region-bar" style={{height:`${item.heightPercent}%`,background:item.color}}/><small>{item.name}</small></div>)}</div></div><div className="region-legend">{regionalBars.slice(0, 3).map((item) => <span key={item.name}><i style={{background:item.color}}/> {item.name} <b>{item.valueFormatted}</b></span>)}</div></article></section>
         <section className="report-insights" aria-label="Phân tích bổ sung">
-          <article className="insight-card"><h2>Doanh số theo khu vực</h2>{regionalInsightRows.length > 0 ? regionalInsightRows.map((item) => <div className="insight-bar-row" key={item.misaCode || item.name}><span>{item.name}</span><i><b style={{ width: `${item.width}%` }}/></i><strong>{item.valueFormatted}</strong></div>) : <p>Chưa có snapshot AMIS cho tháng đã chọn.</p>}<p>Nguồn: biểu đồ “Doanh số theo đơn vị” trên AMIS CRM.</p></article>
-          <article className="insight-card vehicle-card"><h2>Doanh số theo dòng xe</h2>{['Dòng xe 1', 'Dòng xe 2', 'Dòng xe 3', 'Dòng xe 4', 'Dòng xe 5'].map((name, index) => <div className="insight-bar-row" key={name}><span>{name}</span><i><b style={{ width: `${80 - index * 16}%` }}/></i><strong>00,0</strong></div>)}<p>Top mẫu bán chạy và hàng tồn trên 90 ngày xem ở bảng bên dưới.</p></article>
+          <article className="insight-card"><div className="panel-heading"><h2>Doanh số theo khu vực</h2><button className="text-button" onClick={async () => { const loaded = await loadRegionalSales(reportMonth); notify(loaded ? 'Đã tải lại doanh số theo khu vực.' : 'Chưa thể tải snapshot khu vực; đang hiển thị dữ liệu dự phòng.'); }}>Tải lại khu vực</button></div>{regionalInsightRows.map((item) => <div className="insight-bar-row" key={item.misaCode || item.name}><span>{item.name}</span><i><b style={{ width: `${item.width}%` }}/></i><strong>{item.valueFormatted}</strong></div>)}</article>
+          <article className="insight-card vehicle-card"><div className="panel-heading"><h2>Doanh số theo dòng xe</h2><button className="text-button" onClick={async () => { const loaded = await loadProductSales(reportMonth); notify(loaded ? 'Đã tải lại doanh số theo dòng xe.' : 'Chưa có snapshot doanh số theo dòng xe cho tháng đã chọn.'); }}>Tải lại dòng xe</button></div>{productInsightRows.length > 0 ? productInsightRows.map((item) => <div className="insight-bar-row" key={item.misaCode || item.name}><span>{item.name}</span><i><b style={{ width: `${item.width}%` }}/></i><strong>{item.valueFormatted}</strong></div>) : <p>Chưa có snapshot doanh số theo dòng xe cho tháng đã chọn.</p>}</article>
           <article className="insight-card debt-card"><h2>Công nợ theo tuổi nợ</h2><div className="debt-stack"><i/><i/><i/><i/></div>{[['Chưa đến hạn', '00,0 tỷ'], ['1–30 ngày', '00,0 tỷ'], ['31–60 ngày', '00,0 tỷ'], ['61–90 ngày', '00,0 tỷ'], ['Trên 90 ngày', '00,0 tỷ']].map(([label, value], index) => <div className={`debt-row ${index === 4 ? 'overdue' : ''}`} key={label}><span>{label}</span><strong>{value}</strong></div>)}<p>Đến hạn trong 7 ngày: 00,0 tỷ · Vượt hạn mức: 00 đại lý</p></article>
         </section>
         <section className="secondary-grid"><article className="panel table-panel"><div className="panel-heading table-heading"><div><h2>{tableView === 'staff' ? 'Doanh số đã ghi theo Nhân viên (T11/2026)' : 'Doanh số đã ghi theo Đại lý (T11/2026)'}</h2><p>{tableView === 'staff' ? '10 nhân viên có doanh số đã ghi tháng 11/2026 trên AMIS CRM (Tổng: 513.485.805 ₫)' : 'Các đại lý phát sinh đơn hàng đã ghi trong tháng 11/2026'}</p></div><div className="table-tools"><label className="search-box"><Search size={14}/><input aria-label="Tìm kiếm" placeholder={tableView === 'staff' ? 'Tìm nhân viên, bộ phận...' : 'Tìm đại lý, tỉnh thành...'} value={query} onChange={e => setQuery(e.target.value)}/></label><button className="text-button" onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>{tableView === 'staff' ? 'Xem theo Đại lý' : 'Xem theo Nhân viên'} <ArrowRight size={14}/></button></div></div><div className="table-scroll"><table><thead><tr><th>{tableView === 'staff' ? 'NHÂN VIÊN' : 'ĐẠI LÝ / KHÁCH HÀNG'}</th><th>{tableView === 'staff' ? 'ĐƠN VỊ / BỘ PHẬN' : 'TỈNH / KHU VỰC'}</th><th>ĐÃ THỰC HIỆN (CRM)</th><th>SỐ ĐƠN / TỶ LỆ</th><th>TRẠNG THÁI</th><th/></tr></thead><tbody>{filteredRows.slice(0, 12).map((row) => <tr key={row.name}><td><span className="table-avatar">{row.name.split(' ').map(word => word[0]).slice(-2).join('').toUpperCase()}</span><strong>{row.name}</strong></td><td>{row.province}</td><td className="amount-cell">{row.salesFormatted}</td><td><span className="change-up"><ArrowUpRight size={13}/> {row.ratioFormatted}</span></td><td><span className={`status ${row.status === 'Còn công nợ' ? 'status-warn' : ''}`}><i/>{row.status}</span></td><td><button className="row-more" aria-label={`Tùy chọn ${row.name}`} onClick={() => notify(`Đang xem: ${row.name} (${row.salesFormatted})`)}><MoreHorizontal size={17}/></button></td></tr>)}{filteredRows.length === 0 && <tr><td className="empty-row" colSpan={6}>Không tìm thấy dữ liệu phù hợp</td></tr>}</tbody></table></div><div className="table-footer"><span>Hiển thị <b>{Math.min(12, filteredRows.length)}</b> / <b>{filteredRows.length}</b> {tableView === 'staff' ? 'nhân viên' : 'đại lý'} · Tổng đơn đã ghi T11: <b>{crmData?.summary?.totalSalesFormatted || '513.485.805 ₫'}</b></span><div><button disabled>‹</button><button className="current-page">1</button><button onClick={() => setTableView(tableView === 'staff' ? 'dealers' : 'staff')}>2</button></div></div></article>

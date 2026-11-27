@@ -1,15 +1,11 @@
 import nextEnv from '@next/env';
-import { chromium } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { amisReaderError, assertAmisAuthenticated, openAmisCrmSession } from './lib/amis-crm-browser.mjs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STAFF_SOURCE, isStaffMonth, isStaffSnapshot, parseStaffRows } from '../lib/crm-excellent-staff.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 nextEnv.loadEnvConfig(root);
-const profile = process.env.AMIS_CRM_BROWSER_PROFILE || process.env.AMIS_ACCOUNTING_BROWSER_PROFILE;
-const endpoint = process.env.AMIS_CRM_BROWSER_ENDPOINT || process.env.AMIS_ACCOUNTING_BROWSER_ENDPOINT || 'http://127.0.0.1:9223';
 const wait = milliseconds => new Promise(done => setTimeout(done, milliseconds));
 
 function requestedMonth() {
@@ -20,65 +16,10 @@ function requestedMonth() {
   return month;
 }
 
-async function lockProfile() {
-  if (!profile || !existsSync(profile)) throw new Error('Chưa cấu hình phiên trình duyệt AMIS.');
-  const path = resolve(profile, 'bikeforce-script.lock');
-  const deadline = Date.now() + 20000;
-  while (existsSync(path)) {
-    const owner = Number(readFileSync(path, 'utf8'));
-    let stale = false;
-    if (Number.isInteger(owner) && owner > 0) {
-      try { process.kill(owner, 0); } catch (error) { stale = error.code === 'ESRCH'; }
-    }
-    if (stale) { unlinkSync(path); break; }
-    if (Date.now() >= deadline) throw new Error('Phiên AMIS đang đồng bộ tác vụ khác; sẽ thử lại ở lượt sau.');
-    await wait(500);
-  }
-  const handle = openSync(path, 'wx');
-  try { writeFileSync(handle, String(process.pid)); } finally { closeSync(handle); }
-  return () => { if (existsSync(path) && readFileSync(path, 'utf8') === String(process.pid)) unlinkSync(path); };
-}
-
-async function ready() {
-  try { return (await fetch(`${endpoint}/json/version`, { signal: AbortSignal.timeout(1000) })).ok; }
-  catch { return false; }
-}
-
-async function connect() {
-  const url = new URL(endpoint);
-  if (!['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Phiên trình duyệt AMIS phải chạy trên máy đồng bộ.');
-  if (!(await ready())) {
-    const executable = [process.env.AMIS_CHROME_EXECUTABLE,
-      'C:/Program Files/Google/Chrome/Application/chrome.exe',
-      'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-    ].find(path => path && existsSync(path));
-    if (!executable) throw new Error('Không tìm thấy Chrome của máy đồng bộ AMIS.');
-    const child = spawn(executable, ['--headless=new', '--remote-debugging-address=127.0.0.1',
-      `--remote-debugging-port=${url.port}`, `--user-data-dir=${profile}`,
-      '--no-first-run', '--no-default-browser-check', 'about:blank'],
-    { detached: true, stdio: 'ignore', windowsHide: true });
-    let failed = false;
-    child.on('error', () => { failed = true; });
-    child.unref();
-    const deadline = Date.now() + 10000;
-    while (!(await ready())) {
-      if (failed || Date.now() >= deadline) throw new Error('Không mở được phiên Chrome AMIS.');
-      await wait(300);
-    }
-  }
-  return chromium.connectOverCDP(endpoint, { timeout: 10000 });
-}
-
 async function readRanking(month) {
-  const release = await lockProfile();
-  let browser;
-  let page;
+  const session = await openAmisCrmSession();
+  const { page, context } = session;
   try {
-    browser = await connect();
-    const context = browser.contexts()[0];
-    if (!context) throw new Error('Không có phiên AMIS CRM.');
-    page = await context.newPage();
-    await page.setViewportSize({ width: 1920, height: 1080 });
     let captured;
     page.on('request', request => {
       const url = new URL(request.url());
@@ -95,9 +36,7 @@ async function readRanking(month) {
     let scrolled = false;
     while (!captured && Date.now() < deadline) {
       const text = await page.locator('body').innerText();
-      if (/\/login|\/Login/.test(page.url()) || /Đăng nhập bằng tài khoản MISA|Đang có người dùng khác sử dụng tài khoản này/.test(text)) {
-        throw new Error('Cần đăng nhập lại phiên AMIS CRM trên máy đồng bộ.');
-      }
+      assertAmisAuthenticated({ url: page.url(), text });
       if (!scrolled && await heading.count()) { await heading.scrollIntoViewIfNeeded(); scrolled = true; }
       await wait(300);
     }
@@ -116,6 +55,7 @@ async function readRanking(month) {
     const headers = Object.fromEntries(Object.entries(requestHeaders).filter(([name]) =>
       ['authorization', 'companycode', 'layoutcode', 'content-type', 'x-misa-language', 'origin', 'referer'].includes(name.toLowerCase())));
     const response = await context.request.post(captured.request.url(), { headers, data: body, timeout: 25000 });
+    assertAmisAuthenticated({ url: response.url(), status: response.status() });
     if (!response.ok()) throw new Error(`API Nhân viên xuất sắc trả HTTP ${response.status()}.`);
     const rows = parseStaffRows(await response.json());
     const snapshot = {
@@ -129,16 +69,12 @@ async function readRanking(month) {
     if (!isStaffSnapshot(snapshot)) throw new Error('Dữ liệu Nhân viên xuất sắc không hợp lệ.');
     return snapshot;
   } finally {
-    try { await page?.close().catch(() => {}); await browser?.close(); }
-    finally { release(); }
+    await session.close();
   }
 }
 
 try { console.log(JSON.stringify(await readRanking(requestedMonth()))); }
 catch (error) {
-  // Never print raw browser diagnostics, headers or session credentials.
-  const message = error instanceof Error && !/Call log:|https?:|Target page|browserType\.|page\./.test(error.message)
-    ? error.message : 'Không đọc được API Nhân viên xuất sắc; giữ bản đồng bộ trước.';
-  console.log(JSON.stringify({ error: message }));
+  console.log(JSON.stringify(amisReaderError(error)));
   process.exitCode = 1;
 }

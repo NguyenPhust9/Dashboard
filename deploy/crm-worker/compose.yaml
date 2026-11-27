@@ -1,0 +1,33 @@
+name: dashboard-crm
+services:
+  crm-worker:
+    hostname: dashboard-crm-worker
+    build:
+      context: ../..
+      dockerfile: deploy/crm-worker/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file: .env.local
+    shm_size: 1gb
+    mem_limit: 2g
+    cpus: 2
+    stop_grace_period: 8m
+    security_opt:
+      - seccomp=./seccomp_profile.json
+    ports:
+      - "127.0.0.1:6080:6080"
+    volumes:
+      - browser-profile:/var/lib/amis-crm
+    healthcheck:
+      test: ["CMD", "node", "deploy/crm-worker/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+volumes:
+  browser-profile:

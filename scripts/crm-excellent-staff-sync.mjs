@@ -23,7 +23,7 @@ async function sourceConfig() {
 async function main() {
   const source = await sourceConfig();
   const syncUrl = process.env.DASHBOARD_STAFF_SYNC_URL
-    || (source.DASHBOARD_REPORT26_SYNC_URL || '').replace(/\/amis-report-sync$/, '/amis-excellent-staff-sync');
+    || (process.env.DASHBOARD_REPORT26_SYNC_URL || source.DASHBOARD_REPORT26_SYNC_URL || '').replace(/\/amis-report-sync$/, '/amis-excellent-staff-sync');
   const secret = process.env.AMIS_REPORT_SYNC_SECRET || source.DASHBOARD_REPORT_SYNC_SECRET;
   if (!syncUrl || !secret) throw new Error('Thiếu URL hoặc khóa đồng bộ Nhân viên xuất sắc.');
   const args = [resolve(root, 'scripts/crm-excellent-staff-read.mjs')];
@@ -35,6 +35,9 @@ async function main() {
       cwd: root, timeout: 180000, windowsHide: true, maxBuffer: 256 * 1024,
     }));
   } catch (error) {
+    let code;
+    try { if (JSON.parse(error.stdout)?.code === 'AUTH_REQUIRED') code = 'AUTH_REQUIRED'; } catch { /* Only relay a known status. */ }
+    if (code) throw Object.assign(new Error('Phiên AMIS CRM cần đăng nhập lại.'), { code });
     let message;
     try { message = JSON.parse(error.stdout)?.error; } catch { /* Do not print raw diagnostics. */ }
     throw new Error(message || 'Không đọc được API Nhân viên xuất sắc; giữ bản đồng bộ trước.');
@@ -52,6 +55,7 @@ async function main() {
 }
 
 main().catch(error => {
+  if (error?.code === 'AUTH_REQUIRED') console.log(JSON.stringify({ code: 'AUTH_REQUIRED' }));
   console.error(error instanceof Error ? error.message : 'Không đồng bộ được Nhân viên xuất sắc.');
   process.exitCode = 1;
 });

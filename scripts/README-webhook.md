@@ -1,5 +1,7 @@
 # Cấu hình webhook AMIS CRM
 
+Bộ chạy Linux độc lập đã có cấu hình tại [deploy/crm-worker](../deploy/crm-worker/README.md), gồm Chromium lưu phiên trên volume, worker, healthcheck và đăng nhập qua SSH. Chưa có máy chủ được cấp hoặc phiên AMIS trên server được đăng nhập, nên Production hiện vẫn dùng tác vụ Windows mô tả dưới đây. Chỉ chuyển hẳn sau khi nghiệm thu trên máy chủ.
+
 Địa chỉ nhận: `https://baocao-chi.vercel.app/api/amis-webhook`.
 
 Trong CRM, thay địa chỉ webhook cũ bằng địa chỉ trên, giữ phương thức `POST`, thêm Header `Authorization` với giá trị `Bearer <AMIS_WEBHOOK_SECRET>`. Cấu hình để sao chép nằm trong `data/amis-webhook-config.local.txt`, được loại khỏi Git. Khóa phía server nằm trong `.env` và biến môi trường Production của Vercel.

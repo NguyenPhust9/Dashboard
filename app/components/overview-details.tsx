@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import type { StaffResult, StaffSnapshot } from '@/lib/crm-excellent-staff';
+import type { CustomerResult, CustomerSnapshot } from '@/lib/crm-top-customers';
 import { overviewMockData as data } from './overview-mock-data';
 import styles from './overview-details.module.css';
 
 const money = (value: number) => (value / 1_000_000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const percent = (value: number) => `${value > 0 ? '+' : ''}${value.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
 const staffColors = ['#ff6636', '#83ae97', '#4587df', '#d952d7', '#9fcb28', '#7a6af1', '#ef9d00'];
 const initials = (name: string) => {
   const words = name.trim().split(/\s+/);
@@ -21,12 +21,13 @@ const readTime = (value: string) => {
 
 export default function OverviewDetails({ month }: { month: string }) {
   const [staffState, setStaffState] = useState<{ month: string; snapshot: StaffSnapshot | null; error?: string; loading: boolean }>({ month, snapshot: null, loading: true });
-  const [showTop20, setShowTop20] = useState(false);
+  const [customerState, setCustomerState] = useState<{ month: string; snapshot: CustomerSnapshot | null; error?: string; loading: boolean }>({ month, snapshot: null, loading: true });
   const [showAllOverdue, setShowAllOverdue] = useState(false);
   const [inactiveDays, setInactiveDays] = useState(30);
   const inactiveRows = data.inactiveDealers.filter(row => row.days >= inactiveDays);
   const conversion = data.funnel.orders / data.funnel.quotes * 100;
   const staff: typeof staffState = staffState.month === month ? staffState : { month, snapshot: null, loading: true };
+  const customers: typeof customerState = customerState.month === month ? customerState : { month, snapshot: null, loading: true };
 
   useEffect(() => {
     let active = true;
@@ -68,6 +69,46 @@ export default function OverviewDetails({ month }: { month: string }) {
     };
   }, [month]);
 
+  useEffect(() => {
+    let active = true;
+    let controller: AbortController;
+    let refreshTimer: ReturnType<typeof setTimeout>;
+    setCustomerState({ month, snapshot: null, loading: true });
+
+    const loadCustomers = async () => {
+      controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45_000);
+      setCustomerState(previous => ({ ...previous, loading: true }));
+      try {
+        const response = await fetch(`/api/crm-top-customers?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal: controller.signal });
+        const result: CustomerResult = await response.json();
+        if (!active) return;
+        if (!result.snapshot || result.snapshot.month !== month || !Array.isArray(result.snapshot.rows)) {
+          throw new Error(result.error || 'Chưa lấy được danh sách khách hàng từ AMIS CRM.');
+        }
+        setCustomerState({ month, snapshot: result.snapshot, error: result.error || (!response.ok ? 'AMIS CRM chưa cập nhật được dữ liệu mới.' : undefined), loading: false });
+      } catch (error) {
+        if (!active) return;
+        setCustomerState(previous => ({
+          month,
+          snapshot: previous.month === month ? previous.snapshot : null,
+          error: error instanceof Error && error.name !== 'AbortError' ? error.message : 'Kết nối AMIS CRM quá thời gian chờ.',
+          loading: false,
+        }));
+      } finally {
+        clearTimeout(timeout);
+        if (active) refreshTimer = setTimeout(loadCustomers, 60_000);
+      }
+    };
+
+    void loadCustomers();
+    return () => {
+      active = false;
+      controller?.abort();
+      clearTimeout(refreshTimer);
+    };
+  }, [month]);
+
   return <section className={styles.overview} aria-label="Chi tiết điều hành">
     <div className={styles.mockLabel}><span>Các ô còn lại: dữ liệu mẫu</span><small>Đơn vị tiền các ô mẫu: triệu đồng</small></div>
     <div className={styles.pair}>
@@ -89,20 +130,20 @@ export default function OverviewDetails({ month }: { month: string }) {
         </div>
       </article>
 
-      <article className={styles.card}>
+      <article className={styles.card} aria-label="Top đại lý doanh số">
         <header className={styles.heading}>
           <h2>Top đại lý doanh số</h2>
-          <button type="button" aria-expanded={showTop20} onClick={() => setShowTop20(value => !value)}>{showTop20 ? 'Top 5' : 'Top 20'}</button>
         </header>
-        <div className={styles.tableWrap}>
-          <table className={styles.table} aria-label="Top đại lý doanh số">
-            <thead><tr><th>#</th><th>Đại lý</th><th>Tỉnh</th><th className={styles.number}>Doanh số</th><th className={styles.number}>Tăng/giảm</th></tr></thead>
-            <tbody>{data.dealers.slice(0, showTop20 ? 20 : 5).map((row, index) => <tr key={row.name}>
-              <td className={styles.rank}>{index + 1}</td><td className={styles.name}>{row.name}</td><td className={styles.name}>{row.province}</td>
-              <td className={styles.number}>{money(row.sales)}</td>
-              <td className={`${styles.number} ${row.growth < 0 ? styles.negative : styles.positive}`}>{percent(row.growth)}</td>
-            </tr>)}</tbody>
-          </table>
+        {customers.snapshot ? (customers.snapshot.rows.length ? <ol className={styles.customerList}>
+          {customers.snapshot.rows.map((row, index) => <li key={row.id} className={styles.customerRow}>
+            <div className={styles.staffIdentity}><strong>{index + 1} {row.name}</strong><span>{row.code}</span></div>
+            <strong className={styles.staffRevenue}>{row.revenue.toLocaleString('vi-VN')}</strong>
+          </li>)}
+        </ol> : <p className={styles.staffEmpty}>Không có khách hàng trong kỳ đã chọn.</p>) : <p className={styles.staffEmpty} role="status">{customers.loading ? 'Đang tải từ AMIS CRM…' : 'Chưa lấy được dữ liệu khách hàng từ AMIS CRM.'}</p>}
+        <div className={styles.staffSource}>
+          <span>{customers.snapshot?.source || 'AMIS CRM · KH có doanh số cao nhất'} · {month.split('-').reverse().join('/')} · Đơn vị: đồng</span>
+          {customers.snapshot && <span>{customers.error ? 'Bản lưu gần nhất' : 'Đọc lúc'}: {readTime(customers.snapshot.generatedAt)}{customers.loading ? ' · Đang cập nhật…' : ''}</span>}
+          {customers.error && <span className={styles.staffError} role="status">{customers.error}{customers.snapshot ? ' Đang hiển thị bản lưu của kỳ đã chọn.' : ''}</span>}
         </div>
       </article>
     </div>

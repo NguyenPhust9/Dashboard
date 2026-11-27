@@ -1,11 +1,5 @@
 // Mockup only. Replace these fixtures when the data sources are confirmed.
 export const overviewMockData = {
-  dealers: Array.from({ length: 20 }, (_, index) => ({
-    name: `Đại lý ${String.fromCharCode(65 + index)}`,
-    province: ['TP.HCM', 'Đồng Nai', 'Đà Nẵng', 'Cần Thơ', 'An Giang'][index % 5],
-    sales: (865 - index * 37) * 1_000_000,
-    growth: [18.5, 12.8, -5.2, 9.6, -3.4][index % 5],
-  })),
   inactiveDealers: [
     { name: 'Đại lý F', owner: 'Nhân viên A', days: 123, lastOrder: '27/07' },
     { name: 'Đại lý G', owner: 'Nhân viên B', days: 86, lastOrder: '02/09' },

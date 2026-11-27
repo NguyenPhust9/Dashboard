@@ -91,6 +91,9 @@
 .staffSource { display: grid; gap: 5px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #edf1f7; color: #637994; font-size: 11px; line-height: 1.5; }
 .staffSource .staffError { color: #a05a19; }
 
+.customerList { display: grid; gap: 18px; max-height: 520px; overflow-y: auto; margin: 16px 0; padding: 0 6px 0 0; list-style: none; }
+.customerRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 16px; }
+
 .dayFilter { display: flex; align-items: center; flex-shrink: 0; color: #637994; font-size: 11px; }
 .dayFilter button { padding: 2px 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; font-size: inherit; }
 .dayFilter button + button::before { content: '/'; margin-right: 7px; color: #8d9bb0; }

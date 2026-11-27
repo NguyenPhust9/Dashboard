@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { receivableKpi } from '@/lib/accounting-overview';
+import type { AccountingReceivableResult } from '@/lib/accounting-overview';
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bike, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, ChevronDown, CircleHelp, Clock3, CreditCard, Download,
@@ -174,6 +176,7 @@ export default function Dashboard() {
   const [regionalSalesRows, setRegionalSalesRows] = useState<RegionalSalesRow[]>([]);
   const [productSalesRows, setProductSalesRows] = useState<ProductSalesRow[]>([]);
   const [receivableAge, setReceivableAge] = useState<ReceivableAgeValues | null>(null);
+  const [accountingReceivable, setAccountingReceivable] = useState<AccountingReceivableResult | null>(null);
   const [reportSyncing, setReportSyncing] = useState(false);
   const [reportSyncMessage, setReportSyncMessage] = useState('Đang gửi yêu cầu đồng bộ...');
 
@@ -318,6 +321,27 @@ export default function Dashboard() {
   }, [loadAmisData, loadProductSales, loadReceivableAge, loadRegionalSales, reportMonth]);
 
   useEffect(() => {
+    if (active !== 0) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshReceivable = async () => {
+      try {
+        const response = await fetch('/api/accounting-receivable', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error('Không tải được số phải thu từ Kế toán.');
+        setAccountingReceivable(await response.json() as AccountingReceivableResult);
+      } catch {
+        if (!controller.signal.aborted) setAccountingReceivable(previous => ({
+          snapshot: previous?.snapshot ?? null, error: 'Không tải được số phải thu từ Kế toán.',
+        }));
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(refreshReceivable, 60_000);
+      }
+    };
+    void refreshReceivable();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [active]);
+
+  useEffect(() => {
     const savedTarget = Number(window.localStorage.getItem('abraham-bike-kpi-target') || 0);
     if (Number.isFinite(savedTarget) && savedTarget > 0) {
       setKpiTarget(savedTarget);
@@ -332,7 +356,7 @@ export default function Dashboard() {
   const overviewKpis = active === 0
     ? kpis.map((item, index) => index === 2
       ? ['% hoàn thành KPI', `${kpiCompletion.toFixed(0)}%`, kpiTarget > 0 ? `${collectedAmount.toLocaleString('vi-VN')} ₫ / ${kpiTarget.toLocaleString('vi-VN')} ₫` : 'Nhập KPI để tính %', 'KPI tiền thực thu']
-      : item)
+      : index === 3 ? receivableKpi(accountingReceivable) : item)
     : kpis;
   const activeSalesByDay = crmData?.connected && crmData.salesByDay?.length ? crmData.salesByDay : fallbackSalesByDay;
   const salesPeriodBuckets = useMemo(() => {
@@ -493,7 +517,7 @@ export default function Dashboard() {
           {overviewKpis.map((item, index) => {
             const isNegative = item[2].startsWith('-');
             return (
-              <article className={`kpi-card kpi-${index}`} key={item[0]}>
+              <article className={`kpi-card kpi-${index}`} key={item[0]} title={active === 0 && index === 3 ? accountingReceivable?.error || 'Tổng · Nợ phải thu theo hạn nợ · AMIS Kế toán (đơn vị gốc: triệu đồng)' : undefined}>
                 <div className="kpi-top">
                   <span>{item[0]}</span>
                   <button aria-label="Tùy chọn"><MoreHorizontal size={17}/></button>

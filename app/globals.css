@@ -667,6 +667,15 @@ button {
   color: #88928a;
 }
 
+.receivable-update {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #88928a;
+}
+
 .kpi-spark {
   position: absolute;
   right: 0;

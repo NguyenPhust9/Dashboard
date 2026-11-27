@@ -64,9 +64,15 @@ export function receivableKpi(result: AccountingReceivableResult | null): string
   const date = new Date(snapshot.generatedAt).toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   });
+  const shortAmount = (amount: number) => {
+    if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tỷ`;
+    if (amount >= 1_000_000) return `${(amount / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tr`;
+    return `${amount.toLocaleString('vi-VN')} ₫`;
+  };
   return [
     'Còn phải thu', `${snapshot.receivable.total.toLocaleString('vi-VN')} ₫`,
-    result?.error ? 'Bản lưu gần nhất' : 'AMIS Kế toán',
-    `Đọc lúc ${date}`,
+    `${shortAmount(snapshot.receivable.overdue)} quá hạn`,
+    `${shortAmount(snapshot.receivable.current)} trong hạn`,
+    `${result?.error ? 'Bản lưu gần nhất' : 'AMIS Kế toán'} · Đọc lúc ${date}`,
   ];
 }

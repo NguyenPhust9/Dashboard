@@ -53,9 +53,21 @@ test('null, strings, missing amounts and invalid timestamps are not valid financ
 test('the card uses the overview Total, handles zero, and identifies a cached value after a failed sync', () => {
   const data = snapshot('2026-11-27T04:00:00Z', 0);
   assert.equal(receivableKpi({ snapshot: data })[1], '0 ₫');
-  assert.equal(receivableKpi({ snapshot: data, error: 'Session expired' })[2], 'Bản lưu gần nhất');
+  assert.equal(receivableKpi({ snapshot: data })[2], '0 ₫ quá hạn');
+  assert.equal(receivableKpi({ snapshot: data })[3], '0 ₫ trong hạn');
+  assert.match(receivableKpi({ snapshot: data, error: 'Session expired' })[4], /^Bản lưu gần nhất · Đọc lúc /);
   assert.equal(receivableKpi({ snapshot: null, error: 'Session expired' })[1], '—');
   assert.equal(receivableKpi(null)[1], '—');
+});
+
+test('keeps overdue and current amounts visible below the total, with sync metadata separate', () => {
+  const data = { generatedAt: '2026-11-27T04:00:00Z', receivable: { total: 6_041_000_000, overdue: 4_018_000_000, current: 2_023_000_000 } };
+  const kpi = receivableKpi({ snapshot: data });
+  assert.equal(kpi[1], '6.041.000.000 ₫');
+  assert.equal(kpi[2], '4,02 tỷ quá hạn');
+  assert.equal(kpi[3], '2,02 tỷ trong hạn');
+  assert.match(kpi[4], /^AMIS Kế toán · Đọc lúc /);
+  assert.deepEqual(receivableKpi({ snapshot: data, error: 'Session expired' }).slice(1, 4), kpi.slice(1, 4));
 });
 
 test('does not stamp an old AMIS widget as freshly updated when refresh has not completed', () => {

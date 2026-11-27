@@ -554,6 +554,9 @@ export default function Dashboard() {
                   </span>
                   <small>{item[3]}</small>
                 </div>
+                {active === 0 && index === 3 && item[4] && (
+                  <small className="receivable-update">{item[4]}</small>
+                )}
                 <div className="kpi-spark" aria-hidden="true">
                   <svg viewBox="0 0 100 32" preserveAspectRatio="none">
                     <path d={index === 1 ? 'M0 25 C14 22 16 28 28 19 S45 17 53 20 S70 4 82 11 S91 7 100 3' : 'M0 26 C12 21 16 24 25 19 S39 22 48 13 S63 16 72 9 S86 14 100 4'}/>

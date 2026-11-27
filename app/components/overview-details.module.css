@@ -80,6 +80,17 @@
 .table .positive { color: #237550; }
 .table .negative { color: #cb301a; }
 
+.staffList { display: grid; gap: 16px; max-height: 520px; overflow-y: auto; margin: 16px 0; padding: 0 6px 0 0; list-style: none; }
+.staffRow { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.staffAvatar { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; color: #fff; font-size: 19px; font-weight: 600; }
+.staffIdentity { display: grid; gap: 5px; min-width: 0; padding-top: 1px; line-height: 1.4; }
+.staffIdentity strong { color: #11243d; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.staffIdentity > span { color: #637994; font-size: 13px; overflow-wrap: anywhere; }
+.staffRevenue { padding-top: 1px; color: #20b79f; font-size: 14px; font-weight: 600; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.staffEmpty { margin: 24px 0; color: #637994; font-size: 13px; line-height: 1.6; }
+.staffSource { display: grid; gap: 5px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #edf1f7; color: #637994; font-size: 11px; line-height: 1.5; }
+.staffSource .staffError { color: #a05a19; }
+
 .dayFilter { display: flex; align-items: center; flex-shrink: 0; color: #637994; font-size: 11px; }
 .dayFilter button { padding: 2px 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; font-size: inherit; }
 .dayFilter button + button::before { content: '/'; margin-right: 7px; color: #8d9bb0; }
@@ -106,4 +117,8 @@
   .table th { font-size: 10px; }
   .heading { gap: 8px; }
   .heading h2 { font-size: 13px; }
+  .staffRow { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 8px; }
+  .staffAvatar { width: 36px; height: 36px; font-size: 16px; }
+  .staffIdentity strong, .staffRevenue { font-size: 12px; }
+  .staffIdentity > span { font-size: 11px; }
 }

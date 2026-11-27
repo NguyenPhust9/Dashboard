@@ -1,37 +1,91 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { StaffResult, StaffSnapshot } from '@/lib/crm-excellent-staff';
 import { overviewMockData as data } from './overview-mock-data';
 import styles from './overview-details.module.css';
 
 const money = (value: number) => (value / 1_000_000).toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const percent = (value: number) => `${value > 0 ? '+' : ''}${value.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
+const staffColors = ['#ff6636', '#83ae97', '#4587df', '#d952d7', '#9fcb28', '#7a6af1', '#ef9d00'];
+const initials = (name: string) => {
+  const words = name.trim().split(/\s+/);
+  return `${words[0]?.[0] ?? ''}${words.length > 1 ? words[words.length - 1][0] : ''}`.toLocaleUpperCase('vi-VN');
+};
+const readTime = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Chưa xác định' : date.toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+};
 
-export default function OverviewDetails() {
-  const [showAllStaff, setShowAllStaff] = useState(false);
+export default function OverviewDetails({ month }: { month: string }) {
+  const [staffState, setStaffState] = useState<{ month: string; snapshot: StaffSnapshot | null; error?: string; loading: boolean }>({ month, snapshot: null, loading: true });
   const [showTop20, setShowTop20] = useState(false);
   const [showAllOverdue, setShowAllOverdue] = useState(false);
   const [inactiveDays, setInactiveDays] = useState(30);
   const inactiveRows = data.inactiveDealers.filter(row => row.days >= inactiveDays);
   const conversion = data.funnel.orders / data.funnel.quotes * 100;
+  const staff: typeof staffState = staffState.month === month ? staffState : { month, snapshot: null, loading: true };
 
-  return <section className={styles.overview} aria-label="Chi tiết điều hành — dữ liệu mẫu">
-    <div className={styles.mockLabel}><span>Dữ liệu mẫu</span><small>Đơn vị tiền: triệu đồng</small></div>
+  useEffect(() => {
+    let active = true;
+    let controller: AbortController;
+    let refreshTimer: ReturnType<typeof setTimeout>;
+    setStaffState({ month, snapshot: null, loading: true });
+
+    const loadStaff = async () => {
+      controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45_000);
+      setStaffState(previous => ({ ...previous, loading: true }));
+      try {
+        const response = await fetch(`/api/crm-excellent-staff?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal: controller.signal });
+        const result: StaffResult = await response.json();
+        if (!active) return;
+        if (!result.snapshot || result.snapshot.month !== month || !Array.isArray(result.snapshot.rows)) {
+          throw new Error(result.error || 'Chưa lấy được danh sách từ AMIS CRM.');
+        }
+        setStaffState({ month, snapshot: result.snapshot, error: result.error || (!response.ok ? 'AMIS CRM chưa cập nhật được dữ liệu mới.' : undefined), loading: false });
+      } catch (error) {
+        if (!active) return;
+        setStaffState(previous => ({
+          month,
+          snapshot: previous.month === month ? previous.snapshot : null,
+          error: error instanceof Error && error.name !== 'AbortError' ? error.message : 'Kết nối AMIS CRM quá thời gian chờ.',
+          loading: false,
+        }));
+      } finally {
+        clearTimeout(timeout);
+        if (active) refreshTimer = setTimeout(loadStaff, 60_000);
+      }
+    };
+
+    void loadStaff();
+    return () => {
+      active = false;
+      controller?.abort();
+      clearTimeout(refreshTimer);
+    };
+  }, [month]);
+
+  return <section className={styles.overview} aria-label="Chi tiết điều hành">
+    <div className={styles.mockLabel}><span>Các ô còn lại: dữ liệu mẫu</span><small>Đơn vị tiền các ô mẫu: triệu đồng</small></div>
     <div className={styles.pair}>
-      <article className={styles.card}>
+      <article className={styles.card} aria-label="Nhân viên xuất sắc">
         <header className={styles.heading}>
-          <h2>Top nhân viên kinh doanh</h2>
-          <button type="button" aria-expanded={showAllStaff} onClick={() => setShowAllStaff(value => !value)}>{showAllStaff ? 'Thu gọn' : 'Chi tiết'}</button>
+          <h2>Nhân viên xuất sắc</h2>
         </header>
-        <div className={styles.tableWrap}>
-          <table className={styles.table} aria-label="Top nhân viên kinh doanh">
-            <thead><tr><th>#</th><th>Nhân viên</th><th className={styles.number}>Doanh số</th><th className={styles.number}>Thực thu</th><th className={styles.number}>% KPI</th></tr></thead>
-            <tbody>{data.staff.slice(0, showAllStaff ? undefined : 5).map((row, index) => <tr key={row.name}>
-              <td className={styles.rank}>{index + 1}</td><td className={styles.name}>{row.name}</td>
-              <td className={styles.number}>{money(row.sales)}</td><td className={styles.number}>{money(row.collected)}</td>
-              <td className={styles.number}>{row.kpi}%</td>
-            </tr>)}</tbody>
-          </table>
+        {staff.snapshot ? (staff.snapshot.rows.length ? <ol className={styles.staffList}>
+          {staff.snapshot.rows.map((row, index) => <li key={row.id} className={styles.staffRow}>
+            <span className={styles.staffAvatar} style={{ backgroundColor: staffColors[index % staffColors.length] }} aria-hidden="true">{initials(row.name)}</span>
+            <div className={styles.staffIdentity}><strong>{index + 1}. {row.name}</strong><span>{row.organizationUnit}</span></div>
+            <strong className={styles.staffRevenue}>{row.revenue.toLocaleString('vi-VN')}</strong>
+          </li>)}
+        </ol> : <p className={styles.staffEmpty}>Không có nhân viên trong kỳ đã chọn.</p>) : <p className={styles.staffEmpty} role="status">{staff.loading ? 'Đang tải từ AMIS CRM…' : 'Chưa lấy được dữ liệu nhân viên từ AMIS CRM.'}</p>}
+        <div className={styles.staffSource}>
+          <span>{staff.snapshot?.source || 'AMIS CRM · Nhân viên xuất sắc'} · {month.split('-').reverse().join('/')} · Đơn vị: đồng</span>
+          {staff.snapshot && <span>{staff.error ? 'Bản lưu gần nhất' : 'Đọc lúc'}: {readTime(staff.snapshot.generatedAt)}{staff.loading ? ' · Đang cập nhật…' : ''}</span>}
+          {staff.error && <span className={styles.staffError} role="status">{staff.error}{staff.snapshot ? ' Đang hiển thị bản lưu của kỳ đã chọn.' : ''}</span>}
         </div>
       </article>
 

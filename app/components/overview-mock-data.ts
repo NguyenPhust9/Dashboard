@@ -1,14 +1,5 @@
 // Mockup only. Replace these fixtures when the data sources are confirmed.
 export const overviewMockData = {
-  staff: [
-    { name: 'Nhân viên A', sales: 1_280_000_000, collected: 1_080_000_000, kpi: 108 },
-    { name: 'Nhân viên B', sales: 1_125_000_000, collected: 960_000_000, kpi: 96 },
-    { name: 'Nhân viên C', sales: 980_000_000, collected: 850_000_000, kpi: 85 },
-    { name: 'Nhân viên D', sales: 845_000_000, collected: 720_000_000, kpi: 90 },
-    { name: 'Nhân viên E', sales: 720_000_000, collected: 615_000_000, kpi: 82 },
-    { name: 'Nhân viên F', sales: 625_000_000, collected: 540_000_000, kpi: 77 },
-    { name: 'Nhân viên G', sales: 510_000_000, collected: 425_000_000, kpi: 71 },
-  ],
   dealers: Array.from({ length: 20 }, (_, index) => ({
     name: `Đại lý ${String.fromCharCode(65 + index)}`,
     province: ['TP.HCM', 'Đồng Nai', 'Đà Nẵng', 'Cần Thơ', 'An Giang'][index % 5],

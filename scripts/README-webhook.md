@@ -6,6 +6,10 @@ Trong CRM, thay địa chỉ webhook cũ bằng địa chỉ trên, giữ phươ
 
 Endpoint chỉ tiếp nhận JSON đã xác thực, lưu dấu nhận và yêu cầu làm mới tháng hiện tại theo giờ Việt Nam. Số tiền tiếp tục lấy từ API widget CRM, không lấy từ nội dung webhook. Chưa xác minh trường ngày nghiệp vụ của sự kiện, nên webhook không tự suy đoán tháng quá khứ. Các lần gửi gần nhau được gom vào một yêu cầu của tháng; sự kiện mới đến khi đang xử lý vẫn được giữ để đọc lại sau.
 
+Dấu nhận lưu thêm cấu trúc giới hạn của webhook: tên trường cho phép và kiểu dữ liệu, số phần tử, phân hệ `account`/`sale_order`, hành động thêm/sửa. Không lưu nguyên nội dung, mã bản ghi, tên khách hàng, số tiền hoặc ngày nghiệp vụ. Cấu trúc này nằm trong bảng private cùng thời hạn dọn dấu nhận 7 ngày. Lỗi xác thực chỉ ghi một trong ba lý do `missing`, `format`, `mismatch`, không ghi header hay khóa.
+
+Kiểm tra ngày 27/11/2026 xác nhận URL, POST và Bearer trong CRM khớp cấu hình server. API công khai `Account`, `SaleOrders`, `Customers` gọi được bằng client credentials. Token này không đọc được API widget xếp hạng trong phép thử cùng đầy đủ header; token phiên CRM hiện tại đọc được nhưng có thời hạn và chưa có cơ chế gia hạn trên server. Vì vậy luồng dưới đây vẫn phụ thuộc máy đồng bộ, chưa đáp ứng vận hành độc lập khi máy tắt. Không thay số widget bằng trường `Customers.order_sales`, vì kiểm tra thực tế cho thấy số này khác doanh số theo tháng.
+
 ## Luồng cập nhật
 
 `CRM → /api/amis-webhook → hàng đợi Supabase → worker trên máy → API widget CRM → snapshot Dashboard → Realtime trên trình duyệt`.

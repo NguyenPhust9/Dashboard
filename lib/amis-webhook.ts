@@ -17,9 +17,15 @@ export function matchesSecret(received: string | null, expected: string): boolea
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+export function webhookAuthFailure(header: string | null, secret: string): 'missing' | 'format' | 'mismatch' | null {
+  if (!header) return 'missing';
+  const token = header.match(/^Bearer ([^\s]+)$/i)?.[1];
+  if (!token) return 'format';
+  return matchesSecret(token, secret) ? null : 'mismatch';
+}
+
 export function authorizedWebhook(header: string | null, secret: string): boolean {
-  const token = header?.match(/^Bearer ([^\s]+)$/i)?.[1] || null;
-  return matchesSecret(token, secret);
+  return webhookAuthFailure(header, secret) === null;
 }
 
 /** Stop reading at the limit, including chunked requests without Content-Length. */
@@ -52,7 +58,7 @@ export async function readWebhookJson(request: Request, maximumBytes = WEBHOOK_M
   }
 }
 
-/** Stable digest for duplicate deliveries; no customer details are persisted. */
+/** Stable digest used to recognize duplicate deliveries without logging payloads. */
 export function webhookDigest(payload: unknown): string {
   let entries = 0;
   const canonical = (value: unknown, depth: number): string => {
@@ -63,6 +69,64 @@ export function webhookDigest(payload: unknown): string {
     return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonical(object[key], depth + 1)}`).join(',')}}`;
   };
   return createHash('sha256').update(canonical(payload, 0)).digest('hex');
+}
+
+export interface WebhookPayloadSchema {
+  version: 1;
+  fields: { path: string; type: string }[];
+  arrays: { path: string; length: number }[];
+  unknownKeys: number;
+  truncated: boolean;
+  layoutCodes: ('account' | 'sale_order')[];
+  actions: (1 | 2)[];
+}
+
+// Names from the public AMIS CRM webhook/SaleOrder contracts. Unknown keys may
+// themselves contain customer data, so neither their names nor values are kept.
+const webhookSchemaKeys = new Set([
+  'layout_code', 'action', 'objects', 'id', 'book_date', 'sale_order_date',
+  'revenue_status', 'sale_order_amount', 'total_summary', 'liquidate_amount',
+  'recorded_sale_users_name', 'recorded_sale_organization_unit_name',
+  'customer_code', 'customer_name', 'employee_code', 'owner_name',
+]);
+
+/** Bounded schema diagnostics only: no names, IDs, dates, amounts or other values. */
+export function webhookPayloadSchema(payload: unknown): WebhookPayloadSchema {
+  const schema: WebhookPayloadSchema = {
+    version: 1, fields: [], arrays: [], unknownKeys: 0, truncated: false, layoutCodes: [], actions: [],
+  };
+  const seen = new Set<string>();
+  let visited = 0;
+  const inspect = (value: unknown, path: string, depth: number) => {
+    if (depth > 5 || path.length > 160 || ++visited > 500) { schema.truncated = true; return; }
+    const type = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    const identity = `${path}:${type}`;
+    if (!seen.has(identity)) {
+      if (schema.fields.length >= 100) { schema.truncated = true; return; }
+      seen.add(identity);
+      schema.fields.push({ path, type });
+    }
+    if (Array.isArray(value)) {
+      if (schema.arrays.length < 20) schema.arrays.push({ path, length: value.length });
+      else schema.truncated = true;
+      // Sample shapes; the original count is retained, never the actual rows.
+      if (value.length > 20) schema.truncated = true;
+      for (const item of value.slice(0, 20)) inspect(item, `${path}[]`, depth + 1);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, item] of Object.entries(value)) {
+      if (!webhookSchemaKeys.has(key)) { schema.unknownKeys += 1; continue; }
+      // Only documented, finite enums are safe to retain as metadata.
+      if (key === 'layout_code' && (item === 'account' || item === 'sale_order') && !schema.layoutCodes.includes(item)) {
+        schema.layoutCodes.push(item);
+      }
+      if (key === 'action' && (item === 1 || item === 2) && !schema.actions.includes(item)) schema.actions.push(item);
+      inspect(item, `${path}.${key}`, depth + 1);
+    }
+  };
+  inspect(payload, '$', 0);
+  return schema;
 }
 
 export function vietnamMonth(now: Date = new Date()): string {

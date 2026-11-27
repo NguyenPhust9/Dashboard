@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { StaffResult, StaffSnapshot } from '@/lib/crm-excellent-staff';
 import type { CustomerResult, CustomerSnapshot } from '@/lib/crm-top-customers';
+import { createRankingRefresh, subscribeToRankingUpdates } from '@/lib/ranking-realtime';
 import { overviewMockData as data } from './overview-mock-data';
 import styles from './overview-details.module.css';
 
@@ -31,16 +32,12 @@ export default function OverviewDetails({ month }: { month: string }) {
 
   useEffect(() => {
     let active = true;
-    let controller: AbortController;
-    let refreshTimer: ReturnType<typeof setTimeout>;
     setStaffState({ month, snapshot: null, loading: true });
 
-    const loadStaff = async () => {
-      controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45_000);
+    const refresh = createRankingRefresh(async signal => {
       setStaffState(previous => ({ ...previous, loading: true }));
       try {
-        const response = await fetch(`/api/crm-excellent-staff?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal: controller.signal });
+        const response = await fetch(`/api/crm-excellent-staff?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal });
         const result: StaffResult = await response.json();
         if (!active) return;
         if (!result.snapshot || result.snapshot.month !== month || !Array.isArray(result.snapshot.rows)) {
@@ -55,32 +52,26 @@ export default function OverviewDetails({ month }: { month: string }) {
           error: error instanceof Error && error.name !== 'AbortError' ? error.message : 'Kết nối AMIS CRM quá thời gian chờ.',
           loading: false,
         }));
-      } finally {
-        clearTimeout(timeout);
-        if (active) refreshTimer = setTimeout(loadStaff, 60_000);
       }
-    };
+    });
 
-    void loadStaff();
+    refresh.refresh();
+    const unsubscribe = subscribeToRankingUpdates(month, 'staff', refresh.refresh);
     return () => {
       active = false;
-      controller?.abort();
-      clearTimeout(refreshTimer);
+      unsubscribe();
+      refresh.stop();
     };
   }, [month]);
 
   useEffect(() => {
     let active = true;
-    let controller: AbortController;
-    let refreshTimer: ReturnType<typeof setTimeout>;
     setCustomerState({ month, snapshot: null, loading: true });
 
-    const loadCustomers = async () => {
-      controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45_000);
+    const refresh = createRankingRefresh(async signal => {
       setCustomerState(previous => ({ ...previous, loading: true }));
       try {
-        const response = await fetch(`/api/crm-top-customers?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal: controller.signal });
+        const response = await fetch(`/api/crm-top-customers?month=${encodeURIComponent(month)}`, { cache: 'no-store', signal });
         const result: CustomerResult = await response.json();
         if (!active) return;
         if (!result.snapshot || result.snapshot.month !== month || !Array.isArray(result.snapshot.rows)) {
@@ -95,17 +86,15 @@ export default function OverviewDetails({ month }: { month: string }) {
           error: error instanceof Error && error.name !== 'AbortError' ? error.message : 'Kết nối AMIS CRM quá thời gian chờ.',
           loading: false,
         }));
-      } finally {
-        clearTimeout(timeout);
-        if (active) refreshTimer = setTimeout(loadCustomers, 60_000);
       }
-    };
+    });
 
-    void loadCustomers();
+    refresh.refresh();
+    const unsubscribe = subscribeToRankingUpdates(month, 'customers', refresh.refresh);
     return () => {
       active = false;
-      controller?.abort();
-      clearTimeout(refreshTimer);
+      unsubscribe();
+      refresh.stop();
     };
   }, [month]);
 

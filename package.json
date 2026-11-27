@@ -10,6 +10,7 @@
     "accounting:overview:sync": "node scripts/accounting-overview-sync.mjs",
     "crm:excellent-staff:sync": "node scripts/crm-excellent-staff-sync.mjs",
     "crm:top-customers:sync": "node scripts/crm-top-customers-sync.mjs",
+    "crm:webhook:worker": "node scripts/amis-webhook-worker.mjs",
     "crm:weekly-report:sync": "node scripts/crm-weekly-report-sync.mjs"
     ,"crm:product-sales:sync": "node scripts/amis-product-sales-sync.mjs --month 2026-11"
   },

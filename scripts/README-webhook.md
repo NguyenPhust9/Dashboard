@@ -4,6 +4,36 @@
 
 Trong CRM, thay địa chỉ webhook cũ bằng địa chỉ trên, giữ phương thức `POST`, thêm Header `Authorization` với giá trị `Bearer <AMIS_WEBHOOK_SECRET>`. Cấu hình để sao chép nằm trong `data/amis-webhook-config.local.txt`, được loại khỏi Git. Khóa phía server nằm trong `.env` và biến môi trường Production của Vercel.
 
-Endpoint chỉ tiếp nhận JSON đã xác thực, lưu dấu nhận và yêu cầu làm mới tháng hiện tại. Số tiền tiếp tục lấy từ API widget CRM, không lấy từ nội dung webhook. Phạm vi sự kiện và định dạng phản hồi của CRM sẽ được xác minh sau khi người dùng điền cấu hình.
+Endpoint chỉ tiếp nhận JSON đã xác thực, lưu dấu nhận và yêu cầu làm mới tháng hiện tại theo giờ Việt Nam. Số tiền tiếp tục lấy từ API widget CRM, không lấy từ nội dung webhook. Chưa xác minh trường ngày nghiệp vụ của sự kiện, nên webhook không tự suy đoán tháng quá khứ. Các lần gửi gần nhau được gom vào một yêu cầu của tháng; sự kiện mới đến khi đang xử lý vẫn được giữ để đọc lại sau.
 
-Trạng thái chuẩn bị: endpoint nhận và hàng đợi đã triển khai; chưa bật worker xử lý webhook, chưa bật cập nhật giao diện qua Realtime. Các tác vụ đồng bộ định kỳ cũ vẫn giữ nguyên. Theo yêu cầu của người dùng, không gửi webhook giả lập, không chạy worker hay kiểm thử tích hợp trước khi người dùng xác nhận đã điền xong cấu hình CRM.
+## Luồng cập nhật
+
+`CRM → /api/amis-webhook → hàng đợi Supabase → worker trên máy → API widget CRM → snapshot Dashboard → Realtime trên trình duyệt`.
+
+Worker chỉ cập nhật **Nhân viên xuất sắc** và **Top đại lý doanh số**. Mỗi lượt lấy lần lượt hai snapshot bằng các script đồng bộ hiện có; không chạy song song trên cùng phiên Chrome. Chỉ xác nhận hoàn tất khi cả hai đã lưu thành công. Khi API lỗi, phiên AMIS hết hạn hoặc máy mất mạng, hàng đợi giữ yêu cầu để thử lại; bản số liệu gần nhất vẫn còn trên web. Mỗi lượt giữ quyền xử lý trong 10 phút; worker dừng giữa chừng thì yêu cầu có thể được nhận lại khi hết thời hạn. Một xác nhận đã hết hạn (HTTP 409) không ghi đè trạng thái của lượt mới.
+
+Máy phải bật, worker phải chạy và phiên AMIS phải còn đăng nhập để lấy số mới. Webhook là thông báo có thay đổi, không thay thế quyền truy cập API CRM. Tốc độ cập nhật gồm tối đa khoảng 5 giây chờ worker cộng thời gian đọc hai widget và thông báo Realtime; không bảo đảm tức thì. Các tác vụ đồng bộ định kỳ 5 phút vẫn giữ làm dự phòng, và trình duyệt vẫn kiểm tra snapshot mỗi phút nếu Realtime bị ngắt.
+
+## Cấu hình worker
+
+Node.js 22.18+ và phiên Chrome AMIS đã cấu hình cho hai script xếp hạng là bắt buộc. Worker dùng `@next/env` đọc cấu hình tại gốc dự án:
+
+- `DASHBOARD_WEBHOOK_JOBS_URL`: URL đầy đủ, mặc định suy ra `/api/amis-webhook/jobs` từ `DASHBOARD_REPORT26_SYNC_URL` trong cấu hình nguồn.
+- `AMIS_REPORT_SYNC_SECRET`: khóa nội bộ dùng để nhận và xác nhận công việc. Nếu chưa đặt ở đây thì lấy `DASHBOARD_REPORT_SYNC_SECRET` trong cấu hình nguồn hiện có.
+- Cấu hình nguồn đọc từ `BIKEFORCE_AMIS_ENV_FILE`, hoặc file `.env` cạnh `AMIS_ACCOUNTING_OVERVIEW_FILE`, giống các script đồng bộ hiện tại.
+
+Worker dùng khóa đồng bộ nội bộ; **không dùng `AMIS_WEBHOOK_SECRET` dành cho CRM**. Không ghi khóa, header xác thực hay nội dung webhook vào log. Các script con giữ nguyên `DASHBOARD_STAFF_SYNC_URL` và `DASHBOARD_CUSTOMERS_SYNC_URL` cùng cơ chế mặc định đang dùng. Nếu kiểm thử trên localhost, cần trỏ cả ba URL đến cùng máy chủ thử nghiệm để không gửi snapshot sang Production ngoài ý muốn.
+
+```powershell
+npm.cmd run crm:webhook:worker
+# Nhận và xử lý tối đa một công việc, rồi thoát; không có công việc cũng thoát thành công.
+npm.cmd run crm:webhook:worker -- --once
+# Dừng nhận việc mới sau 60 giây; công việc đang chạy được hoàn tất trước khi thoát.
+npm.cmd run crm:webhook:worker -- --run-for 60
+```
+
+Worker kiểm tra hàng đợi mỗi 5 giây; khi kết nối lỗi thì lùi dần đến tối đa 60 giây. Mỗi script con có thời hạn 180 giây và giới hạn bộ đệm 256 KiB. Log nằm ở `data/amis-webhook-worker.log` (không đưa vào Git), xoay sang `.previous` khi vượt 1 MiB. Chỉ ghi thời gian, tháng, lần thử và trạng thái; không chuyển tiếp stdout/stderr thô của API CRM.
+
+Tác vụ Windows có thể dùng action `wscript.exe //B //Nologo "<project>\scripts\amis-webhook-worker.vbs" "<node.exe>"`. Wrapper ẩn cửa sổ, chờ hết vòng đời worker và trả mã thoát cho Task Scheduler. Đặt tác vụ chạy khi đăng nhập và lặp lại mỗi 5 phút, `MultipleInstances = IgnoreNew`, không giới hạn thời gian chạy (`ExecutionTimeLimit = PT0S`). Nhịp 5 phút này chỉ khởi động lại nếu worker đã dừng; worker đang chạy vẫn kiểm tra hàng đợi mỗi 5 giây. Không thay hoặc xóa hai tác vụ đồng bộ định kỳ cũ.
+
+Kiểm tra logic xác nhận và thử lại bằng `node --test tests/amis-webhook-worker.test.mjs`. Chỉ thực hiện kiểm thử tích hợp và kích hoạt worker sau khi người dùng xác nhận đã lưu cấu hình CRM.
